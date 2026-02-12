@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAgentKey } from '@/lib/auth-helpers'
+import { runScholar } from '@packages/agents/scholar'
+import { getClientById } from '@packages/db/queries/clients'
 
 const ScholarRunSchema = z.object({
   clientId: z.string().uuid(),
-  keywords: z.array(z.string()).min(1),
 })
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -14,11 +15,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     const body = ScholarRunSchema.parse(await request.json())
 
-    // TODO: Run Scholar agent via LangGraph (TASK-21)
+    const client = await getClientById(body.clientId)
+    if (!client) {
+      return NextResponse.json({ error: 'Client not found' }, { status: 404 })
+    }
+
+    const result = await runScholar(body.clientId, client.org_id)
+
     return NextResponse.json({
-      status: 'accepted',
-      clientId: body.clientId,
-      keywordCount: body.keywords.length,
+      runId: result.runId,
+      status: result.status,
+      keywordsFound: result.keywordsFound,
+      contentTopics: result.contentTopics,
     }, { status: 202 })
   } catch (error) {
     if (error instanceof z.ZodError) {
