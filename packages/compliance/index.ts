@@ -1,2 +1,2 @@
-export const PACKAGE_NAME = 'compliance' as const;
-// TODO: Implement in TASK-25
+export { complianceEngine } from './engine'
+export type { ComplianceResult, ComplianceDetail } from './engine'
