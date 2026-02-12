@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireRole } from '@/lib/auth-helpers'
-import { getClientByOrgId } from '@packages/db/queries'
+import { getClientByOrgId, getKeywordsByClient } from '@packages/db/queries'
 
 export async function GET(_request: NextRequest): Promise<NextResponse> {
   try {
@@ -12,13 +12,25 @@ export async function GET(_request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: 'Practice not found' }, { status: 404 })
     }
 
-    // TODO: Aggregate KPI data from keywords, content, agent_actions (TASK-34)
+    // Aggregate keyword data
+    const keywords = await getKeywordsByClient(client.id)
+    const keywordCount = keywords.length
+    const keywordsRanked = keywords.filter((k) => k.current_position !== null).length
+    const rankingsImproving = keywords.filter(
+      (k) =>
+        k.current_position !== null &&
+        k.previous_position !== null &&
+        k.current_position < k.previous_position
+    ).length
+
     return NextResponse.json({
       client,
       kpis: {
         healthScore: client.health_score,
+        keywordCount,
+        keywordsRanked,
+        rankingsImproving,
         contentCount: 0,
-        keywordCount: 0,
         pendingActions: 0,
       },
     })
