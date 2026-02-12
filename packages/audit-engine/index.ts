@@ -424,3 +424,5 @@ export {
 export type { AuditResult, Finding, FindingStatus, AuditGrade }
 export { detectCMS } from './detect-cms'
 export type { CMSResult, CMSName, Confidence } from './detect-cms'
+export { findCompetitors } from './competitor-finder'
+export type { Competitor } from './competitor-finder'
