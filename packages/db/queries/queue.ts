@@ -1,5 +1,6 @@
 import type {
   AgentAction,
+  UpdateAgentActionInput,
   ActionStatus,
   Severity,
 } from '@packages/db/types'
@@ -146,6 +147,29 @@ export async function bulkApprove(
   }
 
   return (data as AgentAction[]) || []
+}
+
+/**
+ * Update a queue item with arbitrary fields.
+ * Uses RLS — org_id must match JWT claim.
+ */
+export async function updateQueueItem(
+  actionId: string,
+  data: UpdateAgentActionInput
+): Promise<AgentAction> {
+  const supabase = supabaseServer()
+  const { data: item, error } = await supabase
+    .from('agent_actions')
+    .update(data)
+    .eq('id', actionId)
+    .select()
+    .single()
+
+  if (error) {
+    throw new Error(`Failed to update queue item: ${error.message}`)
+  }
+
+  return item as AgentAction
 }
 
 /**
