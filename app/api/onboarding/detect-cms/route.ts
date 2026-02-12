@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAuth } from '@/lib/auth-helpers'
+import { detectCMS } from '@packages/audit-engine/detect-cms'
 
 const DetectCmsSchema = z.object({
   url: z.string().url(),
@@ -13,13 +14,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     const body = DetectCmsSchema.parse(await request.json())
 
-    // TODO: Fetch website and detect CMS (TASK-19)
-    // Check for WordPress, Wix, Squarespace, Webflow signatures
-    return NextResponse.json({
-      cms: null,
-      confidence: 0,
-      url: body.url,
-    })
+    const result = await detectCMS(body.url)
+
+    return NextResponse.json(result)
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: 'Validation failed', details: error.errors }, { status: 400 })
