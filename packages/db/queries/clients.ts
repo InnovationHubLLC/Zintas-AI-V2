@@ -46,6 +46,25 @@ export async function getClientById(clientId: string): Promise<Client | null> {
 }
 
 /**
+ * Get a client by their domain (cross-org uniqueness check).
+ * Uses admin client to bypass RLS — needed to check if domain is already registered.
+ */
+export async function getClientByDomain(domain: string): Promise<Client | null> {
+  const { data, error } = await supabaseAdmin
+    .from('clients')
+    .select('*')
+    .eq('domain', domain)
+    .single()
+
+  if (error) {
+    if (error.code === 'PGRST116') return null // not found
+    throw new Error(`Failed to get client by domain: ${error.message}`)
+  }
+
+  return data as Client
+}
+
+/**
  * Get all clients (admin operation).
  * Bypasses RLS - use only for agent/server operations.
  */
