@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@packages/db/client'
-import type { Lead } from '@packages/db/types'
+import { getLeadById } from '@packages/db/queries'
+import type { Finding } from '@packages/audit-engine'
 
 export async function GET(
   _request: NextRequest,
@@ -9,21 +9,31 @@ export async function GET(
   try {
     const { id } = await params
 
-    // TODO: Add getLeadById to packages/db/queries/leads.ts
-    const { data, error } = await supabaseAdmin
-      .from('leads')
-      .select('*')
-      .eq('id', id)
-      .single()
+    const lead = await getLeadById(id)
 
-    if (error) {
-      if (error.code === 'PGRST116') {
-        return NextResponse.json({ error: 'Audit not found' }, { status: 404 })
-      }
-      throw error
+    if (!lead) {
+      return NextResponse.json({ error: 'Audit not found' }, { status: 404 })
     }
 
-    return NextResponse.json(data as Lead)
+    const auditResults = lead.audit_results as {
+      score?: number
+      grade?: string
+      findings?: Finding[]
+    }
+
+    const findings = auditResults.findings ?? []
+    const responseFindings = lead.email
+      ? findings
+      : findings.map(({ recommendation: _, ...rest }) => rest)
+
+    return NextResponse.json({
+      id: lead.id,
+      domain: lead.domain,
+      score: auditResults.score ?? lead.audit_score,
+      grade: auditResults.grade,
+      findings: responseFindings,
+      createdAt: lead.created_at,
+    })
   } catch {
     return NextResponse.json({ error: 'Failed to get audit results' }, { status: 500 })
   }
