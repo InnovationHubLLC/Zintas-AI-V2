@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireRole } from '@/lib/auth-helpers'
+import { runScholar } from '@packages/agents/scholar'
 import { createRun } from '@packages/db/queries'
 
 const RunAgentSchema = z.object({
@@ -15,7 +16,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     const body = RunAgentSchema.parse(await request.json())
 
-    // TODO: Dispatch to LangGraph agent (TASK-20)
+    if (body.agentName === 'scholar') {
+      const result = await runScholar(body.clientId, authResult.orgId)
+
+      return NextResponse.json({
+        runId: result.runId,
+        agent: 'scholar',
+        status: result.status,
+        keywordsFound: result.keywordsFound,
+        contentTopics: result.contentTopics,
+      }, { status: 202 })
+    }
+
+    // For other agents, create a run record (dispatch implemented in future tasks)
     const run = await createRun({
       org_id: authResult.orgId,
       client_id: body.clientId,
@@ -30,7 +43,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       checkpoint_data: {},
     })
 
-    return NextResponse.json(run, { status: 202 })
+    return NextResponse.json({
+      runId: run.id,
+      agent: body.agentName,
+      status: 'running',
+    }, { status: 202 })
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: 'Validation failed', details: error.errors }, { status: 400 })
