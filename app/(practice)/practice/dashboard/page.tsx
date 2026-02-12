@@ -1,10 +1,27 @@
 'use client'
 
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
-import { TrendingUp, Users, FileText, Target, ArrowUp, ArrowDown, Clock } from 'lucide-react'
-import { useMemo } from 'react'
+import { TrendingUp, Users, FileText, Target, ArrowUp, ArrowDown, Clock, Search } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
 
-const formatRelativeTime = (isoString: string) => {
+interface DashboardKPIs {
+  healthScore: number
+  keywordCount: number
+  keywordsRanked: number
+  rankingsImproving: number
+  contentCount: number
+  pendingActions: number
+}
+
+interface DashboardData {
+  client: {
+    name: string
+    domain: string
+  }
+  kpis: DashboardKPIs
+}
+
+const formatRelativeTime = (isoString: string): string => {
   const date = new Date(isoString)
   const now = new Date()
   const diffMs = now.getTime() - date.getTime()
@@ -32,56 +49,78 @@ const mockRecentWins = [
   { id: 4, title: 'New blog post published and indexed by Google', timestamp: '2025-02-12T08:00:00Z', impact: 'medium' },
 ]
 
-const mockKeyMetrics = {
-  totalVisitors: 2580,
-  visitorChange: 15.3,
-  leadConversions: 47,
-  conversionChange: 8.2,
-  contentPublished: 12,
-  contentChange: 20,
-  avgKeywordPosition: 4.2,
-  positionChange: -1.8,
-}
+export default function PracticeDashboard(): React.ReactElement {
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
+  const [loading, setLoading] = useState(true)
 
-export default function PracticeDashboard() {
+  useEffect(() => {
+    async function fetchDashboard(): Promise<void> {
+      try {
+        const response = await fetch('/api/practice/dashboard')
+        if (response.ok) {
+          const data: DashboardData = await response.json()
+          setDashboardData(data)
+        }
+      } catch {
+        // Silently fail — show fallback UI
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    void fetchDashboard()
+  }, [])
+
+  const kpis = dashboardData?.kpis
+
   const metrics = useMemo(() => [
     {
       label: 'Website Visitors',
-      value: mockKeyMetrics.totalVisitors.toLocaleString(),
-      change: mockKeyMetrics.visitorChange,
+      value: '2,580',
+      change: 15.3,
       icon: Users,
       color: 'blue',
     },
     {
-      label: 'Lead Conversions',
-      value: mockKeyMetrics.leadConversions,
-      change: mockKeyMetrics.conversionChange,
-      icon: Target,
+      label: 'Keyword Rankings',
+      value: kpis?.keywordsRanked ?? 0,
+      change: kpis?.rankingsImproving ?? 0,
+      icon: Search,
       color: 'green',
     },
     {
       label: 'Content Published',
-      value: mockKeyMetrics.contentPublished,
-      change: mockKeyMetrics.contentChange,
+      value: kpis?.contentCount ?? 0,
+      change: 20,
       icon: FileText,
       color: 'cyan',
     },
     {
-      label: 'Avg. Keyword Position',
-      value: mockKeyMetrics.avgKeywordPosition.toFixed(1),
-      change: mockKeyMetrics.positionChange,
+      label: 'Avg. Position',
+      value: '4.2',
+      change: -1.8,
       icon: TrendingUp,
       color: 'orange',
       inverse: true,
     },
-  ], [])
+  ], [kpis])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-8">
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Dashboard</h1>
-        <p className="text-gray-600">Welcome back, Dr. Smith. Here's what's happening with your practice.</p>
+        <p className="text-gray-600">
+          Welcome back{dashboardData?.client?.name ? `, ${dashboardData.client.name}` : ''}. Here&apos;s what&apos;s happening with your practice.
+        </p>
       </div>
 
       {/* KPI Cards */}
@@ -114,9 +153,6 @@ export default function PracticeDashboard() {
               </div>
               <div className="text-3xl font-bold text-gray-900 mb-1">{metric.value}</div>
               <div className="text-sm text-gray-600">{metric.label}</div>
-              <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r opacity-50" style={{
-                backgroundImage: `linear-gradient(to right, var(--tw-gradient-stops))`,
-              }} />
             </div>
           )
         })}
@@ -138,7 +174,7 @@ export default function PracticeDashboard() {
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={mockTrafficData}>
               <defs>
-                <linearGradient id="colorVisitors" x1="0" y1="0" x2="0" y2="1">
+                <linearGradient id="colorVisitorsPractice" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.3} />
                   <stop offset="95%" stopColor="#3B82F6" stopOpacity={0} />
                 </linearGradient>
@@ -167,7 +203,7 @@ export default function PracticeDashboard() {
                 stroke="#3B82F6"
                 strokeWidth={2}
                 fillOpacity={1}
-                fill="url(#colorVisitors)"
+                fill="url(#colorVisitorsPractice)"
               />
             </AreaChart>
           </ResponsiveContainer>
