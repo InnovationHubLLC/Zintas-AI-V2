@@ -1,7 +1,9 @@
 'use client'
 
 import Link from 'next/link'
-import { ArrowRight, CheckCircle, BarChart3, FileText, TrendingUp, Sparkles, Zap, Shield } from 'lucide-react'
+import { ArrowRight, CheckCircle, BarChart3, FileText, TrendingUp, Sparkles, Zap, Shield, Star, Quote } from 'lucide-react'
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
+import { ROICalculator } from '@/app/components/roi-calculator'
 
 const features = [
   {
@@ -70,6 +72,70 @@ const pricingPlans = [
   },
 ]
 
+interface FAQItem {
+  question: string
+  answer: string
+}
+
+const FAQ_ITEMS: FAQItem[] = [
+  {
+    question: 'How does AI replace a marketing agency?',
+    answer: 'Zintas AI handles the same tasks a marketing agency would — content creation, SEO optimization, competitor monitoring, and performance reporting — but at a fraction of the cost. Our AI works 24/7 and learns your practice\'s unique voice over time.',
+  },
+  {
+    question: 'Will the content sound like my practice?',
+    answer: 'Absolutely. During onboarding, we learn your practice\'s tone, specialties, and local market. Every piece of content is tailored to sound authentically like your team wrote it, not a generic AI.',
+  },
+  {
+    question: 'How long until I see results?',
+    answer: 'Most practices see measurable improvements in local search visibility within 60-90 days. Content starts indexing within weeks, and our SEO optimizations compound over time for lasting results.',
+  },
+  {
+    question: 'Do I need any technical knowledge?',
+    answer: 'Not at all. Zintas is designed for dental professionals, not developers. Our dashboard is intuitive, and our team handles all the technical setup during onboarding.',
+  },
+  {
+    question: 'Can I cancel anytime?',
+    answer: 'Yes, all plans are month-to-month with no long-term contracts. You can cancel anytime from your dashboard. We believe our results should keep you, not a contract.',
+  },
+  {
+    question: 'Is my data safe?',
+    answer: 'Your data is encrypted at rest and in transit. We never store patient health information, and we comply with all relevant data protection regulations. Your practice data is yours alone.',
+  },
+]
+
+interface Testimonial {
+  name: string
+  role: string
+  practice: string
+  quote: string
+  rating: number
+}
+
+const TESTIMONIALS: Testimonial[] = [
+  {
+    name: 'Dr. Sarah Mitchell',
+    role: 'Owner',
+    practice: 'Bright Smile Family Dentistry, Austin TX',
+    quote: 'We went from page 3 to the top 5 on Google Maps in under 4 months. Zintas writes blog posts that actually sound like our team, and our new patient calls have increased by 35%.',
+    rating: 5,
+  },
+  {
+    name: 'Dr. James Park',
+    role: 'Partner',
+    practice: 'Lakewood Dental Group, Denver CO',
+    quote: 'I used to spend $4,500/month on a marketing agency that sent me a PDF once a quarter. Zintas costs a fraction of that and I can see exactly what\'s happening in real time.',
+    rating: 5,
+  },
+  {
+    name: 'Dr. Maria Santos',
+    role: 'Owner',
+    practice: 'Gentle Care Pediatric Dentistry, Miami FL',
+    quote: 'As a pediatric practice, our content needs to speak to parents in a specific way. Zintas nailed our tone from day one and handles everything so I can focus on my patients.',
+    rating: 5,
+  },
+]
+
 export default function HomePage() {
   return (
     <div className="min-h-screen bg-white">
@@ -97,7 +163,7 @@ export default function HomePage() {
                 Free Audit
               </Link>
               <Link
-                href="/practice/dashboard"
+                href="/sign-up"
                 className="px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg text-sm font-medium hover:shadow-lg hover:shadow-blue-500/50 transition-all"
               >
                 Get Started
@@ -156,6 +222,18 @@ export default function HomePage() {
               </div>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* Social Proof */}
+      <section className="py-12 px-4 sm:px-6 lg:px-8 bg-white border-b border-gray-100">
+        <div className="max-w-7xl mx-auto text-center">
+          <p className="text-lg font-semibold text-gray-900">
+            500+ dental practices trust Zintas
+          </p>
+          <p className="text-sm text-gray-500 mt-2">
+            From solo practitioners to multi-location groups across the US
+          </p>
         </div>
       </section>
 
@@ -238,7 +316,7 @@ export default function HomePage() {
                 </ul>
 
                 <Link
-                  href="/practice/dashboard"
+                  href="/sign-up"
                   className={`block w-full py-3 rounded-lg text-center font-semibold transition-all ${
                     plan.popular
                       ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:shadow-lg hover:shadow-blue-500/50'
@@ -250,6 +328,84 @@ export default function HomePage() {
               </div>
             ))}
           </div>
+
+          {/* ROI Calculator */}
+          <div className="mt-16 max-w-2xl mx-auto">
+            <div className="text-center mb-8">
+              <h3 className="text-2xl font-bold text-gray-900 mb-2">
+                Calculate Your ROI
+              </h3>
+              <p className="text-gray-600">
+                See how much additional revenue Zintas AI can generate for your practice.
+              </p>
+            </div>
+            <ROICalculator className="bg-white p-8 rounded-2xl border border-gray-200 shadow-lg" />
+          </div>
+        </div>
+      </section>
+
+      {/* Testimonials Section */}
+      <section className="py-20 px-4 sm:px-6 lg:px-8 bg-white">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
+              Loved by Dental Professionals
+            </h2>
+            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+              See what dentists across the country are saying about Zintas AI.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-8">
+            {TESTIMONIALS.map((testimonial, index) => (
+              <div
+                key={index}
+                data-testid="testimonial"
+                className="p-8 bg-gradient-to-br from-white to-gray-50 rounded-2xl border border-gray-200 hover:shadow-lg transition-all"
+              >
+                <Quote className="w-8 h-8 text-blue-200 mb-4" />
+                <p className="text-gray-700 mb-6 leading-relaxed">
+                  &ldquo;{testimonial.quote}&rdquo;
+                </p>
+                <div className="flex items-center space-x-1 mb-3">
+                  {Array.from({ length: testimonial.rating }).map((_, i) => (
+                    <Star key={i} className="w-4 h-4 fill-yellow-400 text-yellow-400" />
+                  ))}
+                </div>
+                <div>
+                  <p className="font-semibold text-gray-900">{testimonial.name}</p>
+                  <p className="text-sm text-gray-500">{testimonial.role}, {testimonial.practice}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* FAQ Section */}
+      <section id="faq" className="py-20 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-gray-50 to-white">
+        <div className="max-w-3xl mx-auto">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
+              Frequently Asked Questions
+            </h2>
+            <p className="text-xl text-gray-600">
+              Everything you need to know about Zintas AI.
+            </p>
+          </div>
+
+          <Accordion type="single" collapsible className="w-full">
+            {FAQ_ITEMS.map((item, index) => (
+              <AccordionItem key={index} value={`faq-${index}`}>
+                <AccordionTrigger className="text-left text-base font-medium text-gray-900">
+                  {item.question}
+                </AccordionTrigger>
+                <AccordionContent className="text-gray-600 leading-relaxed">
+                  {item.answer}
+                </AccordionContent>
+              </AccordionItem>
+            ))}
+          </Accordion>
         </div>
       </section>
 
@@ -260,15 +416,24 @@ export default function HomePage() {
             Ready to Transform Your Marketing?
           </h2>
           <p className="text-xl text-blue-100 mb-8">
-            Join hundreds of dental practices already using Zintas AI to grow their patient base.
+            Join 500+ dental practices already using Zintas AI to grow their patient base.
           </p>
-          <Link
-            href="/audit"
-            className="inline-flex items-center space-x-2 px-8 py-4 bg-white text-blue-600 rounded-xl text-lg font-semibold hover:shadow-2xl hover:scale-105 transition-all"
-          >
-            <span>Get Your Free SEO Audit</span>
-            <ArrowRight className="w-5 h-5" />
-          </Link>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <Link
+              href="/audit"
+              className="inline-flex items-center space-x-2 px-8 py-4 bg-white text-blue-600 rounded-xl text-lg font-semibold hover:shadow-2xl hover:scale-105 transition-all"
+            >
+              <span>Get Your Free SEO Audit</span>
+              <ArrowRight className="w-5 h-5" />
+            </Link>
+            <Link
+              href="/sign-up"
+              className="inline-flex items-center space-x-2 px-8 py-4 bg-blue-500 text-white rounded-xl text-lg font-semibold hover:bg-blue-400 hover:shadow-2xl hover:scale-105 transition-all"
+            >
+              <span>Start Free Trial</span>
+              <ArrowRight className="w-5 h-5" />
+            </Link>
+          </div>
         </div>
       </section>
 
@@ -282,7 +447,7 @@ export default function HomePage() {
             <span className="text-xl font-bold text-white">Zintas AI</span>
           </div>
           <p className="text-gray-400 text-sm">
-            © 2026 Zintas AI. All rights reserved.
+            &copy; 2026 Zintas AI. All rights reserved.
           </p>
         </div>
       </footer>
