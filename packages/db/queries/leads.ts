@@ -30,6 +30,29 @@ export async function createLead(
 }
 
 /**
+ * Get a lead by its ID.
+ * Uses supabaseAdmin — leads table has no RLS.
+ */
+export async function getLeadById(
+  leadId: string
+): Promise<Lead | null> {
+  const { data, error } = await supabaseAdmin
+    .from('leads')
+    .select('*')
+    .eq('id', leadId)
+    .single()
+
+  if (error) {
+    if (error.code === 'PGRST116') {
+      return null
+    }
+    throw new Error(`Failed to get lead: ${error.message}`)
+  }
+
+  return data as Lead
+}
+
+/**
  * Get leads with optional filters.
  * Uses supabaseAdmin — leads table has no RLS.
  */
