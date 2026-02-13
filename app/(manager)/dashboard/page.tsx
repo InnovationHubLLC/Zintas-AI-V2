@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import Link from 'next/link'
 import { Search, Filter, ExternalLink, FileText, Settings, Activity, AlertCircle, TrendingUp } from 'lucide-react'
+import { ApiError } from '@/app/components/api-error'
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -70,26 +71,31 @@ function PortfolioSkeleton(): React.ReactElement {
 export default function ManagerPortfolio(): React.ReactElement {
   const [clients, setClients] = useState<ClientItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<number | 'network' | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [activeFilter, setActiveFilter] = useState<FilterType>('all')
 
-  useEffect(() => {
-    async function fetchClients(): Promise<void> {
-      try {
-        const response = await fetch('/api/clients')
-        if (response.ok) {
-          const data: ClientItem[] = await response.json()
-          setClients(data)
-        }
-      } catch {
-        // Failed to load
-      } finally {
-        setLoading(false)
+  const fetchClients = useCallback(async (): Promise<void> => {
+    setLoading(true)
+    setError(null)
+    try {
+      const response = await fetch('/api/clients')
+      if (!response.ok) {
+        setError(response.status)
+        return
       }
+      const data: ClientItem[] = await response.json()
+      setClients(data)
+    } catch {
+      setError('network')
+    } finally {
+      setLoading(false)
     }
-
-    void fetchClients()
   }, [])
+
+  useEffect(() => {
+    void fetchClients()
+  }, [fetchClients])
 
   const filteredClients = useMemo(() => {
     return clients.filter((c) => {
@@ -121,6 +127,18 @@ export default function ManagerPortfolio(): React.ReactElement {
           <p className="text-gray-600">Manage and monitor all your dental practice clients.</p>
         </div>
         <PortfolioSkeleton />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-8">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Client Portfolio</h1>
+          <p className="text-gray-600">Manage and monitor all your dental practice clients.</p>
+        </div>
+        <ApiError status={error} onRetry={() => void fetchClients()} />
       </div>
     )
   }

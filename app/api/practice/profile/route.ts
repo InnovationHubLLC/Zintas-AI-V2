@@ -21,13 +21,11 @@ const LocationSchema = z.object({
 
 const UpdateProfileSchema = z.object({
   name: z.string().min(1).optional(),
-  domain: z.string().url().optional(),
   vertical: z.string().optional(),
   description: z.string().optional(),
   doctors: z.array(DoctorSchema).optional(),
   services: z.array(z.string()).optional(),
   locations: z.array(LocationSchema).optional(),
-  practice_profile: z.record(z.unknown()).optional(),
 })
 
 interface ProfileResponse {
@@ -43,7 +41,6 @@ interface ProfileResponse {
     google: { gsc: boolean; ga: boolean; gbp: boolean; lastSync: string | null }
     cms: { connected: boolean; type: string | null; lastSync: string | null }
   }
-  practice_profile: Record<string, unknown>
 }
 
 export async function GET(_request: NextRequest): Promise<NextResponse> {
@@ -81,7 +78,6 @@ export async function GET(_request: NextRequest): Promise<NextResponse> {
           lastSync: (profile.cms_last_sync as string) ?? null,
         },
       },
-      practice_profile: profile,
     }
 
     return NextResponse.json(response)
@@ -106,7 +102,6 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
     const existingProfile = (client.practice_profile ?? {}) as Record<string, unknown>
     const mergedProfile: Record<string, unknown> = {
       ...existingProfile,
-      ...(body.practice_profile ?? {}),
     }
 
     if (body.description !== undefined) mergedProfile.description = body.description

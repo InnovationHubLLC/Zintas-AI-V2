@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts'
 import { TrendingUp, TrendingDown, Minus, Search, FileText, Target, Activity } from 'lucide-react'
+import { ApiError } from '@/app/components/api-error'
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -84,25 +85,30 @@ function ChartSkeleton(): React.ReactElement {
 export default function PracticeReports(): React.ReactElement {
   const [data, setData] = useState<ReportsData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<number | 'network' | null>(null)
   const [activeTab, setActiveTab] = useState<TabType>('traffic')
 
-  useEffect(() => {
-    async function fetchReports(): Promise<void> {
-      try {
-        const response = await fetch('/api/practice/reports')
-        if (response.ok) {
-          const result: ReportsData = await response.json()
-          setData(result)
-        }
-      } catch {
-        // Failed to load
-      } finally {
-        setLoading(false)
+  const fetchReports = useCallback(async (): Promise<void> => {
+    setLoading(true)
+    setError(null)
+    try {
+      const response = await fetch('/api/practice/reports')
+      if (!response.ok) {
+        setError(response.status)
+        return
       }
+      const result: ReportsData = await response.json()
+      setData(result)
+    } catch {
+      setError('network')
+    } finally {
+      setLoading(false)
     }
-
-    void fetchReports()
   }, [])
+
+  useEffect(() => {
+    void fetchReports()
+  }, [fetchReports])
 
   const metrics = data?.metrics
   const trafficChart = data?.trafficChart ?? []
@@ -138,10 +144,13 @@ export default function PracticeReports(): React.ReactElement {
         <p className="text-gray-600">Track your SEO performance and content engagement.</p>
       </div>
 
+      {/* Error */}
+      {!loading && error && <ApiError status={error} onRetry={() => void fetchReports()} />}
+
       {/* Metrics Row */}
       {loading ? (
         <MetricsSkeleton />
-      ) : (
+      ) : !error ? (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           {metricCards.map((metric, index) => {
             const Icon = metric.icon
@@ -159,10 +168,10 @@ export default function PracticeReports(): React.ReactElement {
             )
           })}
         </div>
-      )}
+      ) : null}
 
       {/* Tabs */}
-      <div className="bg-white rounded-2xl border border-gray-200 p-2 shadow-sm inline-flex">
+      {!error && <div className="bg-white rounded-2xl border border-gray-200 p-2 shadow-sm inline-flex">
         {tabs.map((tab) => (
           <button
             key={tab.id}
@@ -176,12 +185,12 @@ export default function PracticeReports(): React.ReactElement {
             {tab.label}
           </button>
         ))}
-      </div>
+      </div>}
 
       {loading && <ChartSkeleton />}
 
       {/* Traffic Tab */}
-      {!loading && activeTab === 'traffic' && (
+      {!loading && !error && activeTab === 'traffic' && (
         <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
           <h2 className="text-xl font-bold text-gray-900 mb-6">Website Traffic Overview</h2>
           {trafficChart.length > 0 ? (
@@ -231,7 +240,7 @@ export default function PracticeReports(): React.ReactElement {
       )}
 
       {/* Rankings Tab */}
-      {!loading && activeTab === 'rankings' && (
+      {!loading && !error && activeTab === 'rankings' && (
         <div className="space-y-6">
           {/* Rankings by Position Range */}
           <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
@@ -329,7 +338,7 @@ export default function PracticeReports(): React.ReactElement {
       )}
 
       {/* Content Tab */}
-      {!loading && activeTab === 'content' && (
+      {!loading && !error && activeTab === 'content' && (
         <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
           <h2 className="text-xl font-bold text-gray-900 mb-6">Content Performance</h2>
           {contentPerformance.length > 0 ? (

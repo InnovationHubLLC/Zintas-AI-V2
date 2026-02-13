@@ -14,6 +14,8 @@ import {
   AtSign,
   X,
 } from 'lucide-react'
+import { ApiError } from '@/app/components/api-error'
+import { useToast } from '@/app/components/toast'
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -111,6 +113,7 @@ function EmailDialog({
   onSent: () => void
 }): React.ReactElement {
   const [sending, setSending] = useState(false)
+  const { toast } = useToast()
   const score = lead.audit_score ?? 0
 
   const template = `Hi, you recently audited ${lead.domain} and scored ${score}/100. We can fix these issues automatically. Start your free trial at zintas.ai/sign-up`
@@ -120,10 +123,15 @@ function EmailDialog({
     try {
       const response = await fetch(`/api/leads/${lead.id}/email`, { method: 'POST' })
       if (response.ok) {
+        toast('success', 'Follow-up email sent successfully!')
         onSent()
+      } else if (response.status === 429) {
+        toast('error', 'This lead was already emailed recently.')
+      } else {
+        toast('error', 'Failed to send email. Please try again.')
       }
     } catch {
-      // Failed to send
+      toast('error', 'Network error. Check your connection and try again.')
     } finally {
       setSending(false)
     }
@@ -148,7 +156,9 @@ function EmailDialog({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email Template</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Email Template <span className="text-xs text-gray-400 font-normal">(auto-generated)</span>
+            </label>
             <div className="px-3 py-3 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700 leading-relaxed">
               {template}
             </div>
@@ -180,6 +190,7 @@ function EmailDialog({
 export default function ManagerLeads(): React.ReactElement {
   const [leads, setLeads] = useState<LeadItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<number | 'network' | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [sortField, setSortField] = useState<SortField>('audit_score')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
@@ -189,30 +200,40 @@ export default function ManagerLeads(): React.ReactElement {
   const [expandedRow, setExpandedRow] = useState<string | null>(null)
   const [emailDialogLead, setEmailDialogLead] = useState<LeadItem | null>(null)
 
-  useEffect(() => {
-    async function fetchLeads(): Promise<void> {
-      try {
-        const response = await fetch('/api/leads')
-        if (response.ok) {
-          const data: LeadItem[] = await response.json()
-          setLeads(data)
-        }
-      } catch {
-        // Failed to load
-      } finally {
-        setLoading(false)
+  function doFetch(): void {
+    setError(null)
+    setLoading(true)
+    void fetchLeads()
+  }
+
+  async function fetchLeads(): Promise<void> {
+    try {
+      const response = await fetch('/api/leads')
+      if (!response.ok) {
+        setError(response.status)
+        return
       }
+      const data: LeadItem[] = await response.json()
+      setLeads(data)
+    } catch {
+      setError('network')
+    } finally {
+      setLoading(false)
     }
+  }
+
+  useEffect(() => {
     void fetchLeads()
   }, [])
 
   // ── Computed stats ─────────────────────────────
   const totalLeads = leads.length
   const withEmail = leads.filter((l) => l.email !== null).length
+  const scoredLeads = leads.filter((l) => l.audit_score !== null)
   const avgScore =
-    totalLeads > 0
+    scoredLeads.length > 0
       ? Math.round(
-          leads.reduce((sum, l) => sum + (l.audit_score ?? 0), 0) / totalLeads
+          scoredLeads.reduce((sum, l) => sum + (l.audit_score ?? 0), 0) / scoredLeads.length
         )
       : 0
   const convertedCount = leads.filter((l) => l.converted).length
@@ -276,6 +297,18 @@ export default function ManagerLeads(): React.ReactElement {
           <p className="text-gray-600">Manage leads captured from the free audit tool.</p>
         </div>
         <LeadsSkeleton />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-8">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Leads</h1>
+          <p className="text-gray-600">Manage leads captured from the free audit tool.</p>
+        </div>
+        <ApiError status={error} onRetry={doFetch} />
       </div>
     )
   }
