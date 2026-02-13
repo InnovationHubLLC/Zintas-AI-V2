@@ -1,2 +1,9 @@
-export const PACKAGE_NAME = 'local-seo' as const;
-// TODO: Implement in TASK-31
+export { GBPService } from './gbp-service'
+export type {
+  GBPLocation,
+  GBPPostInput,
+  GBPPostResult,
+  GBPReview,
+  GBPInsights,
+  CategorySuggestion,
+} from './gbp-service'
