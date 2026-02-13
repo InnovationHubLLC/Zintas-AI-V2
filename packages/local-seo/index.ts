@@ -7,3 +7,14 @@ export type {
   GBPInsights,
   CategorySuggestion,
 } from './gbp-service'
+
+export {
+  schedulePost,
+  publishScheduledPosts,
+  generateWeeklyGBPPosts,
+} from './scheduler'
+export type {
+  SchedulePostInput,
+  GBPPostDraft,
+  PublishResult,
+} from './scheduler'
