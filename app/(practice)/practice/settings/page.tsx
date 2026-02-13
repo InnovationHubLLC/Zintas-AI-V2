@@ -6,9 +6,9 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import {
   Save,
-  Check,
   Plus,
   Trash2,
+  X,
   User,
   Stethoscope,
   MapPin,
@@ -16,6 +16,8 @@ import {
   ClipboardList,
   type LucideIcon,
 } from 'lucide-react'
+import { ApiError } from '@/app/components/api-error'
+import { useToast } from '@/app/components/toast'
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -140,31 +142,17 @@ function SettingsSkeleton(): React.ReactElement {
   )
 }
 
-// ── Toast ────────────────────────────────────────────────────────
-
-function Toast({ message, onClose }: { message: string; onClose: () => void }): React.ReactElement {
-  useEffect(() => {
-    const timer = setTimeout(onClose, 3000)
-    return () => clearTimeout(timer)
-  }, [onClose])
-
-  return (
-    <div className="fixed bottom-6 right-6 z-50 flex items-center space-x-2 px-4 py-3 bg-green-600 text-white rounded-lg shadow-lg animate-in slide-in-from-bottom-4">
-      <Check className="w-5 h-5" />
-      <span className="text-sm font-medium">{message}</span>
-    </div>
-  )
-}
-
 // ── Main Component ───────────────────────────────────────────────
 
 export default function PracticeSettings(): React.ReactElement {
   const [activeTab, setActiveTab] = useState<TabType>('profile')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [toast, setToast] = useState<string | null>(null)
+  const [fetchError, setFetchError] = useState<number | 'network' | null>(null)
   const [profileData, setProfileData] = useState<ProfileData | null>(null)
   const [selectedServices, setSelectedServices] = useState<Set<string>>(new Set())
+  const [customServiceInput, setCustomServiceInput] = useState('')
+  const { toast } = useToast()
 
   // Profile form
   const profileForm = useForm<ProfileFormData>({
@@ -197,36 +185,39 @@ export default function PracticeSettings(): React.ReactElement {
     async function fetchProfile(): Promise<void> {
       try {
         const response = await fetch('/api/practice/profile')
-        if (response.ok) {
-          const data: ProfileData = await response.json()
-          setProfileData(data)
-
-          profileForm.reset({
-            name: data.name,
-            vertical: data.vertical,
-            description: data.description,
-          })
-          doctorForm.reset({
-            doctors: data.doctors.map((d) => ({
-              name: d.name,
-              title: d.title,
-              specialization: d.specialization ?? [],
-              npi: d.npi ?? '',
-              bio: d.bio ?? '',
-            })),
-          })
-          locationForm.reset({
-            locations: data.locations.map((l) => ({
-              address: l.address,
-              phone: l.phone ?? '',
-              hours: l.hours ?? {},
-              primary: l.primary ?? false,
-            })),
-          })
-          setSelectedServices(new Set(data.services))
+        if (!response.ok) {
+          setFetchError(response.status)
+          return
         }
+        const data: ProfileData = await response.json()
+        setProfileData(data)
+        setFetchError(null)
+
+        profileForm.reset({
+          name: data.name,
+          vertical: data.vertical,
+          description: data.description,
+        })
+        doctorForm.reset({
+          doctors: data.doctors.map((d) => ({
+            name: d.name,
+            title: d.title,
+            specialization: d.specialization ?? [],
+            npi: d.npi ?? '',
+            bio: d.bio ?? '',
+          })),
+        })
+        locationForm.reset({
+          locations: data.locations.map((l) => ({
+            address: l.address,
+            phone: l.phone ?? '',
+            hours: l.hours ?? {},
+            primary: l.primary ?? false,
+          })),
+        })
+        setSelectedServices(new Set(data.services))
       } catch {
-        // Failed to load
+        setFetchError('network')
       } finally {
         setLoading(false)
       }
@@ -248,9 +239,13 @@ export default function PracticeSettings(): React.ReactElement {
           description: data.description,
         }),
       })
-      if (response.ok) setToast('Saved! Profile updated successfully.')
+      if (response.ok) {
+        toast('success', 'Profile updated successfully.')
+      } else {
+        toast('error', 'Failed to save profile.')
+      }
     } catch {
-      // Failed
+      toast('error', 'Network error. Please try again.')
     } finally {
       setSaving(false)
     }
@@ -264,9 +259,13 @@ export default function PracticeSettings(): React.ReactElement {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ doctors: data.doctors }),
       })
-      if (response.ok) setToast('Saved! Doctors updated successfully.')
+      if (response.ok) {
+        toast('success', 'Doctors updated successfully.')
+      } else {
+        toast('error', 'Failed to save doctors.')
+      }
     } catch {
-      // Failed
+      toast('error', 'Network error. Please try again.')
     } finally {
       setSaving(false)
     }
@@ -280,9 +279,13 @@ export default function PracticeSettings(): React.ReactElement {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ services: Array.from(selectedServices) }),
       })
-      if (response.ok) setToast('Saved! Services updated successfully.')
+      if (response.ok) {
+        toast('success', 'Services updated successfully.')
+      } else {
+        toast('error', 'Failed to save services.')
+      }
     } catch {
-      // Failed
+      toast('error', 'Network error. Please try again.')
     } finally {
       setSaving(false)
     }
@@ -296,9 +299,13 @@ export default function PracticeSettings(): React.ReactElement {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ locations: data.locations }),
       })
-      if (response.ok) setToast('Saved! Locations updated successfully.')
+      if (response.ok) {
+        toast('success', 'Locations updated successfully.')
+      } else {
+        toast('error', 'Failed to save locations.')
+      }
     } catch {
-      // Failed
+      toast('error', 'Network error. Please try again.')
     } finally {
       setSaving(false)
     }
@@ -309,6 +316,26 @@ export default function PracticeSettings(): React.ReactElement {
       const next = new Set(prev)
       if (next.has(service)) next.delete(service)
       else next.add(service)
+      return next
+    })
+  }
+
+  function addCustomService(): void {
+    const trimmed = customServiceInput.trim()
+    if (!trimmed) return
+    if (selectedServices.has(trimmed)) {
+      toast('info', 'Service already added.')
+      setCustomServiceInput('')
+      return
+    }
+    setSelectedServices((prev) => new Set([...prev, trimmed]))
+    setCustomServiceInput('')
+  }
+
+  function removeCustomService(service: string): void {
+    setSelectedServices((prev) => {
+      const next = new Set(prev)
+      next.delete(service)
       return next
     })
   }
@@ -337,6 +364,18 @@ export default function PracticeSettings(): React.ReactElement {
           <p className="text-gray-600">Manage your practice information and preferences.</p>
         </div>
         <SettingsSkeleton />
+      </div>
+    )
+  }
+
+  if (fetchError) {
+    return (
+      <div className="space-y-8">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Settings</h1>
+          <p className="text-gray-600">Manage your practice information and preferences.</p>
+        </div>
+        <ApiError status={fetchError} onRetry={() => window.location.reload()} />
       </div>
     )
   }
@@ -598,6 +637,54 @@ export default function PracticeSettings(): React.ReactElement {
                       </div>
                     </div>
                   ))}
+
+                  {/* Custom Service Input */}
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-3">Custom Services</h3>
+                    <div className="flex items-center space-x-3">
+                      <input
+                        type="text"
+                        value={customServiceInput}
+                        onChange={(e) => setCustomServiceInput(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCustomService() } }}
+                        className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="Add a custom service..."
+                      />
+                      <button
+                        type="button"
+                        onClick={addCustomService}
+                        className="flex items-center space-x-2 px-4 py-3 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>Add</span>
+                      </button>
+                    </div>
+                    {/* Custom service chips */}
+                    {(() => {
+                      const allPredefined = new Set(Object.values(SERVICE_CATEGORIES).flat())
+                      const customServices = Array.from(selectedServices).filter((s) => !allPredefined.has(s))
+                      if (customServices.length === 0) return null
+                      return (
+                        <div className="flex flex-wrap gap-2 mt-3">
+                          {customServices.map((service) => (
+                            <span
+                              key={service}
+                              className="inline-flex items-center space-x-1 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium"
+                            >
+                              <span>{service}</span>
+                              <button
+                                type="button"
+                                onClick={() => removeCustomService(service)}
+                                className="p-0.5 hover:bg-blue-200 rounded-full transition-colors"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )
+                    })()}
+                  </div>
                 </div>
 
                 <div className="flex items-center justify-end pt-6 border-t border-gray-200">
@@ -767,7 +854,13 @@ export default function PracticeSettings(): React.ReactElement {
                             </div>
                           </div>
                           {!isConnected && (
-                            <button className="px-4 py-2 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors">
+                            <button
+                              onClick={() => {
+                                toast('info', 'Redirecting to Google setup flow...')
+                                window.location.href = '/onboarding/start?step=3'
+                              }}
+                              className="px-4 py-2 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors"
+                            >
                               Reconnect
                             </button>
                           )}
@@ -799,7 +892,10 @@ export default function PracticeSettings(): React.ReactElement {
                       </div>
                     </div>
                     {!profileData?.connectedAccounts.cms.connected && (
-                      <button className="px-4 py-2 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors">
+                      <button
+                        onClick={() => toast('info', 'CMS reconnection coming soon.')}
+                        className="px-4 py-2 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors"
+                      >
                         Reconnect
                       </button>
                     )}
@@ -811,8 +907,6 @@ export default function PracticeSettings(): React.ReactElement {
         </div>
       </div>
 
-      {/* Toast */}
-      {toast && <Toast message={toast} onClose={() => setToast(null)} />}
     </div>
   )
 }

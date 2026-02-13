@@ -10,12 +10,13 @@ vi.mock('@upstash/redis', () => ({
 
 vi.mock('@upstash/ratelimit', () => {
   const mockSlidingWindow = vi.fn(() => 'sliding-window-algorithm')
+  const mockFixedWindow = vi.fn(() => 'fixed-window-algorithm')
   return {
     Ratelimit: Object.assign(
       vi.fn(() => ({
         limit: mockLimit,
       })),
-      { slidingWindow: mockSlidingWindow }
+      { slidingWindow: mockSlidingWindow, fixedWindow: mockFixedWindow }
     ),
   }
 })
@@ -45,17 +46,35 @@ describe('TASK-07: Rate Limit Utilities', () => {
       expect(agentRateLimiter.limit).toBeDefined()
     })
 
-    it('should create three Ratelimit instances with correct sliding window configs', async () => {
+    it('should export emailRateLimiter', async () => {
+      const { emailRateLimiter } = await import('./rate-limit')
+      expect(emailRateLimiter).toBeDefined()
+      expect(emailRateLimiter.limit).toBeDefined()
+    })
+
+    it('should export emailPerLeadLimiter', async () => {
+      const { emailPerLeadLimiter } = await import('./rate-limit')
+      expect(emailPerLeadLimiter).toBeDefined()
+      expect(emailPerLeadLimiter.limit).toBeDefined()
+    })
+
+    it('should create five Ratelimit instances with correct configs', async () => {
       const { Ratelimit } = await import('@upstash/ratelimit')
       await import('./rate-limit')
 
-      expect(Ratelimit).toHaveBeenCalledTimes(3)
+      expect(Ratelimit).toHaveBeenCalledTimes(5)
 
       const slidingWindowCalls = vi.mocked(Ratelimit.slidingWindow).mock.calls
       expect(slidingWindowCalls).toEqual([
         [3, '1 h'],
         [100, '1 m'],
         [10, '1 m'],
+        [10, '1 h'],
+      ])
+
+      const fixedWindowCalls = vi.mocked(Ratelimit.fixedWindow).mock.calls
+      expect(fixedWindowCalls).toEqual([
+        [1, '24 h'],
       ])
     })
   })

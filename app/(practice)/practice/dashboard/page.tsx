@@ -2,7 +2,8 @@
 
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { TrendingUp, Users, FileText, Target, ArrowUp, ArrowDown, Clock, Search, Activity } from 'lucide-react'
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
+import { ApiError } from '@/app/components/api-error'
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -109,27 +110,29 @@ function WinsSkeleton(): React.ReactElement {
 export default function PracticeDashboard(): React.ReactElement {
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<number | 'network' | null>(null)
+
+  const fetchDashboard = useCallback(async (): Promise<void> => {
+    setLoading(true)
+    setError(null)
+    try {
+      const response = await fetch('/api/practice/dashboard')
+      if (!response.ok) {
+        setError(response.status)
+        return
+      }
+      const data: DashboardData = await response.json()
+      setDashboardData(data)
+    } catch {
+      setError('network')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
-    async function fetchDashboard(): Promise<void> {
-      try {
-        const response = await fetch('/api/practice/dashboard')
-        if (!response.ok) {
-          setError('Failed to load dashboard')
-          return
-        }
-        const data: DashboardData = await response.json()
-        setDashboardData(data)
-      } catch {
-        setError('Failed to load dashboard')
-      } finally {
-        setLoading(false)
-      }
-    }
-
     void fetchDashboard()
-  }, [])
+  }, [fetchDashboard])
 
   const kpis = dashboardData?.kpis
   const wins = dashboardData?.wins ?? []
@@ -182,16 +185,12 @@ export default function PracticeDashboard(): React.ReactElement {
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <p className="text-red-600 font-medium mb-2">{error}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="text-blue-600 hover:underline text-sm"
-          >
-            Try again
-          </button>
+      <div className="space-y-8">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Dashboard</h1>
+          <p className="text-gray-600">Welcome back. Here&apos;s what&apos;s happening with your practice.</p>
         </div>
+        <ApiError status={error} onRetry={() => void fetchDashboard()} />
       </div>
     )
   }

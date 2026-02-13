@@ -21,6 +21,8 @@ import {
 } from 'lucide-react'
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { ApiError } from '@/app/components/api-error'
+import { useToast } from '@/app/components/toast'
 
 interface KeywordRow {
   id: string
@@ -154,26 +156,31 @@ export default function ClientOverview({ params }: { params: Promise<{ client: s
   const [typeFilter, setTypeFilter] = useState<string>('')
   const [clientDetail, setClientDetail] = useState<ClientDetailData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<number | 'network' | null>(null)
   const [runningAgent, setRunningAgent] = useState<string | null>(null)
+  const { toast } = useToast()
 
-  // Fetch client detail
-  useEffect(() => {
-    async function fetchClientDetail(): Promise<void> {
-      try {
-        const response = await fetch(`/api/clients/${clientId}`)
-        if (response.ok) {
-          const data: ClientDetailData = await response.json()
-          setClientDetail(data)
-        }
-      } catch {
-        // Failed to load
-      } finally {
-        setLoading(false)
+  const fetchClientDetail = useCallback(async (): Promise<void> => {
+    setLoading(true)
+    setError(null)
+    try {
+      const response = await fetch(`/api/clients/${clientId}`)
+      if (!response.ok) {
+        setError(response.status)
+        return
       }
+      const data: ClientDetailData = await response.json()
+      setClientDetail(data)
+    } catch {
+      setError('network')
+    } finally {
+      setLoading(false)
     }
-
-    void fetchClientDetail()
   }, [clientId])
+
+  useEffect(() => {
+    void fetchClientDetail()
+  }, [fetchClientDetail])
 
   const clientData = clientDetail?.client
   const recentActions = clientDetail?.recent_actions ?? []
@@ -183,13 +190,18 @@ export default function ClientOverview({ params }: { params: Promise<{ client: s
   const handleRunAgent = async (agentName: string): Promise<void> => {
     setRunningAgent(agentName)
     try {
-      await fetch('/api/agents/run', {
+      const response = await fetch('/api/agents/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ clientId, agentName }),
       })
+      if (response.ok) {
+        toast('success', `${agentName} agent started successfully.`)
+      } else {
+        toast('error', `Failed to start ${agentName} agent.`)
+      }
     } catch {
-      // Failed
+      toast('error', 'Network error. Please try again.')
     } finally {
       setRunningAgent(null)
     }
@@ -197,29 +209,37 @@ export default function ClientOverview({ params }: { params: Promise<{ client: s
 
   const handleApprove = async (actionId: string): Promise<void> => {
     try {
-      await fetch(`/api/queue/${actionId}/approve`, { method: 'POST' })
-      // Re-fetch client detail
+      const approveResponse = await fetch(`/api/queue/${actionId}/approve`, { method: 'POST' })
+      if (!approveResponse.ok) {
+        toast('error', 'Failed to approve action.')
+        return
+      }
+      toast('success', 'Action approved.')
       const response = await fetch(`/api/clients/${clientId}`)
       if (response.ok) {
         const data: ClientDetailData = await response.json()
         setClientDetail(data)
       }
     } catch {
-      // Failed
+      toast('error', 'Network error. Please try again.')
     }
   }
 
   const handleReject = async (actionId: string): Promise<void> => {
     try {
-      await fetch(`/api/queue/${actionId}/reject`, { method: 'POST' })
-      // Re-fetch client detail
+      const rejectResponse = await fetch(`/api/queue/${actionId}/reject`, { method: 'POST' })
+      if (!rejectResponse.ok) {
+        toast('error', 'Failed to reject action.')
+        return
+      }
+      toast('success', 'Action rejected.')
       const response = await fetch(`/api/clients/${clientId}`)
       if (response.ok) {
         const data: ClientDetailData = await response.json()
         setClientDetail(data)
       }
     } catch {
-      // Failed
+      toast('error', 'Network error. Please try again.')
     }
   }
 
@@ -282,6 +302,20 @@ export default function ClientOverview({ params }: { params: Promise<{ client: s
       setSortField(field)
       setSortOrder('desc')
     }
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-8">
+        <div className="flex items-center space-x-4">
+          <Link href="/dashboard" className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+            <ArrowLeft className="w-5 h-5 text-gray-600" />
+          </Link>
+          <h1 className="text-3xl font-bold text-gray-900">Client Overview</h1>
+        </div>
+        <ApiError status={error} onRetry={() => void fetchClientDetail()} />
+      </div>
+    )
   }
 
   return (

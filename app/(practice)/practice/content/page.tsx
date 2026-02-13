@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Search, FileText, Calendar, Filter, CheckCircle, Clock, AlertCircle, Grid3X3, List, Tag, ExternalLink } from 'lucide-react'
+import { ApiError } from '@/app/components/api-error'
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -70,27 +71,32 @@ function ContentSkeleton(): React.ReactElement {
 export default function ContentLibrary(): React.ReactElement {
   const [items, setItems] = useState<ContentItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<number | 'network' | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [activeFilter, setActiveFilter] = useState<FilterType>('all')
   const [viewMode, setViewMode] = useState<ViewMode>('grid')
 
-  useEffect(() => {
-    async function fetchContent(): Promise<void> {
-      try {
-        const response = await fetch('/api/practice/content')
-        if (response.ok) {
-          const data: ContentItem[] = await response.json()
-          setItems(data)
-        }
-      } catch {
-        // Failed to load
-      } finally {
-        setLoading(false)
+  const fetchContent = useCallback(async (): Promise<void> => {
+    setLoading(true)
+    setError(null)
+    try {
+      const response = await fetch('/api/practice/content')
+      if (!response.ok) {
+        setError(response.status)
+        return
       }
+      const data: ContentItem[] = await response.json()
+      setItems(data)
+    } catch {
+      setError('network')
+    } finally {
+      setLoading(false)
     }
-
-    void fetchContent()
   }, [])
+
+  useEffect(() => {
+    void fetchContent()
+  }, [fetchContent])
 
   const filteredContent = useMemo(() => {
     return items.filter((item) => {
@@ -170,6 +176,9 @@ export default function ContentLibrary(): React.ReactElement {
 
       {/* Loading */}
       {loading && <ContentSkeleton />}
+
+      {/* Error */}
+      {!loading && error && <ApiError status={error} onRetry={() => void fetchContent()} />}
 
       {/* Content Grid */}
       {!loading && viewMode === 'grid' && filteredContent.length > 0 && (

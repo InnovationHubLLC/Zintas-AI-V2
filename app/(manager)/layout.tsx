@@ -4,6 +4,8 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { LayoutDashboard, CheckCircle, UserPlus, Users, Settings, Menu, X, User } from 'lucide-react'
 import { useState } from 'react'
+import { Toaster } from '@/app/components/toast'
+import { ErrorBoundary } from '@/app/components/error-boundary'
 
 const navItems = [
   { href: '/dashboard', label: 'Portfolio', icon: LayoutDashboard },
@@ -22,6 +24,7 @@ export default function ManagerLayout({
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   return (
+    <Toaster>
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-slate-100">
       {/* Desktop Sidebar */}
       <aside className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col">
@@ -172,9 +175,12 @@ export default function ManagerLayout({
       {/* Main Content */}
       <main className="lg:pl-64">
         <div className="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-          {children}
+          <ErrorBoundary>
+            {children}
+          </ErrorBoundary>
         </div>
       </main>
     </div>
+    </Toaster>
   )
 }

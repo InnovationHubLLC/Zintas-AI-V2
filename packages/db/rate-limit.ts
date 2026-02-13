@@ -37,6 +37,18 @@ export const agentRateLimiter = new Ratelimit({
   prefix: '@zintas/ratelimit/agent',
 })
 
+export const emailRateLimiter = new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(10, '1 h'),
+  prefix: '@zintas/ratelimit/email',
+})
+
+export const emailPerLeadLimiter = new Ratelimit({
+  redis,
+  limiter: Ratelimit.fixedWindow(1, '24 h'),
+  prefix: '@zintas/ratelimit/email-lead',
+})
+
 export async function checkRateLimit(
   limiter: RateLimiter,
   identifier: string
