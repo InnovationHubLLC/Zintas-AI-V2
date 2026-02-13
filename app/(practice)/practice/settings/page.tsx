@@ -1,37 +1,345 @@
 'use client'
 
-import { useState } from 'react'
-import { Save, User, CreditCard, Bell, Check, type LucideIcon } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { useForm, useFieldArray } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
+import {
+  Save,
+  Check,
+  Plus,
+  Trash2,
+  User,
+  Stethoscope,
+  MapPin,
+  Link2,
+  ClipboardList,
+  type LucideIcon,
+} from 'lucide-react'
 
-type TabType = 'profile' | 'billing' | 'preferences'
+// ── Types ────────────────────────────────────────────────────────
 
-export default function PracticeSettings() {
+type TabType = 'profile' | 'doctors' | 'services' | 'locations' | 'connected'
+
+interface Doctor {
+  name: string
+  title: string
+  specialization: string[]
+  npi: string
+  bio: string
+}
+
+interface Location {
+  address: string
+  phone: string
+  hours: Record<string, string>
+  primary: boolean
+}
+
+interface ConnectedAccounts {
+  google: { gsc: boolean; ga: boolean; gbp: boolean; lastSync: string | null }
+  cms: { connected: boolean; type: string | null; lastSync: string | null }
+}
+
+interface ProfileData {
+  id: string
+  name: string
+  domain: string
+  vertical: string
+  description: string
+  doctors: Doctor[]
+  services: string[]
+  locations: Location[]
+  connectedAccounts: ConnectedAccounts
+}
+
+// ── Zod Schemas ──────────────────────────────────────────────────
+
+const ProfileFormSchema = z.object({
+  name: z.string().min(1, 'Practice name is required'),
+  vertical: z.string().min(1),
+  description: z.string(),
+})
+
+const DoctorFormSchema = z.object({
+  doctors: z.array(
+    z.object({
+      name: z.string().min(1, 'Doctor name is required'),
+      title: z.string().min(1, 'Title is required'),
+      specialization: z.array(z.string()),
+      npi: z.string(),
+      bio: z.string(),
+    })
+  ),
+})
+
+const LocationFormSchema = z.object({
+  locations: z.array(
+    z.object({
+      address: z.string().min(1, 'Address is required'),
+      phone: z.string(),
+      hours: z.record(z.string()),
+      primary: z.boolean(),
+    })
+  ),
+})
+
+type ProfileFormData = z.infer<typeof ProfileFormSchema>
+type DoctorFormData = z.infer<typeof DoctorFormSchema>
+type LocationFormData = z.infer<typeof LocationFormSchema>
+
+// ── Constants ────────────────────────────────────────────────────
+
+const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const
+
+const SERVICE_CATEGORIES: Record<string, string[]> = {
+  General: ['Cleanings', 'Fillings', 'Crowns', 'Root Canals', 'Extractions'],
+  Cosmetic: ['Teeth Whitening', 'Veneers', 'Bonding', 'Smile Makeover'],
+  Orthodontics: ['Braces', 'Invisalign', 'Retainers', 'Clear Aligners'],
+  Surgical: ['Dental Implants', 'Bone Grafting', 'Wisdom Teeth', 'Jaw Surgery'],
+  Pediatric: ['Sealants', 'Fluoride Treatment', 'Space Maintainers', 'Pediatric Crowns'],
+  Emergency: ['Emergency Repair', 'Pain Relief', 'Abscess Treatment', 'Trauma Care'],
+}
+
+const SPECIALIZATIONS = [
+  'General Dentistry',
+  'Cosmetic Dentistry',
+  'Orthodontics',
+  'Periodontics',
+  'Endodontics',
+  'Oral Surgery',
+  'Pediatric Dentistry',
+  'Prosthodontics',
+]
+
+const VERTICALS = ['dental', 'medical', 'veterinary', 'chiropractic'] as const
+
+// ── Skeleton ─────────────────────────────────────────────────────
+
+function SettingsSkeleton(): React.ReactElement {
+  return (
+    <div className="grid lg:grid-cols-4 gap-8">
+      <div className="lg:col-span-1">
+        <div className="bg-white rounded-2xl border border-gray-200 p-4 animate-pulse space-y-3">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="w-full h-10 bg-gray-200 rounded-lg" />
+          ))}
+        </div>
+      </div>
+      <div className="lg:col-span-3">
+        <div className="bg-white rounded-2xl border border-gray-200 p-8 animate-pulse space-y-6">
+          <div className="w-48 h-8 bg-gray-200 rounded" />
+          <div className="space-y-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="w-full h-12 bg-gray-200 rounded" />
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Toast ────────────────────────────────────────────────────────
+
+function Toast({ message, onClose }: { message: string; onClose: () => void }): React.ReactElement {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 3000)
+    return () => clearTimeout(timer)
+  }, [onClose])
+
+  return (
+    <div className="fixed bottom-6 right-6 z-50 flex items-center space-x-2 px-4 py-3 bg-green-600 text-white rounded-lg shadow-lg animate-in slide-in-from-bottom-4">
+      <Check className="w-5 h-5" />
+      <span className="text-sm font-medium">{message}</span>
+    </div>
+  )
+}
+
+// ── Main Component ───────────────────────────────────────────────
+
+export default function PracticeSettings(): React.ReactElement {
   const [activeTab, setActiveTab] = useState<TabType>('profile')
-  const [saved, setSaved] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [toast, setToast] = useState<string | null>(null)
+  const [profileData, setProfileData] = useState<ProfileData | null>(null)
+  const [selectedServices, setSelectedServices] = useState<Set<string>>(new Set())
 
-  // Profile form state
-  const [practiceName, setPracticeName] = useState('Smith Family Dental')
-  const [website, setWebsite] = useState('smithdental.com')
-  const [email, setEmail] = useState('dr.smith@smithdental.com')
-  const [phone, setPhone] = useState('(479) 555-0123')
-  const [address, setAddress] = useState('123 Main St, Bentonville, AR 72712')
+  // Profile form
+  const profileForm = useForm<ProfileFormData>({
+    resolver: zodResolver(ProfileFormSchema),
+    defaultValues: { name: '', vertical: 'dental', description: '' },
+  })
 
-  // Preferences state
-  const [emailNotifications, setEmailNotifications] = useState(true)
-  const [weeklyReports, setWeeklyReports] = useState(true)
-  const [contentApprovals, setContentApprovals] = useState(false)
-  const [autoPublish, setAutoPublish] = useState(true)
+  // Doctors form
+  const doctorForm = useForm<DoctorFormData>({
+    resolver: zodResolver(DoctorFormSchema),
+    defaultValues: { doctors: [] },
+  })
+  const { fields: doctorFields, append: appendDoctor, remove: removeDoctor } = useFieldArray({
+    control: doctorForm.control,
+    name: 'doctors',
+  })
 
-  const handleSave = () => {
-    setSaved(true)
-    setTimeout(() => setSaved(false), 3000)
+  // Locations form
+  const locationForm = useForm<LocationFormData>({
+    resolver: zodResolver(LocationFormSchema),
+    defaultValues: { locations: [] },
+  })
+  const { fields: locationFields, append: appendLocation, remove: removeLocation } = useFieldArray({
+    control: locationForm.control,
+    name: 'locations',
+  })
+
+  // ── Fetch data ─────────────────────────────────
+  useEffect(() => {
+    async function fetchProfile(): Promise<void> {
+      try {
+        const response = await fetch('/api/practice/profile')
+        if (response.ok) {
+          const data: ProfileData = await response.json()
+          setProfileData(data)
+
+          profileForm.reset({
+            name: data.name,
+            vertical: data.vertical,
+            description: data.description,
+          })
+          doctorForm.reset({
+            doctors: data.doctors.map((d) => ({
+              name: d.name,
+              title: d.title,
+              specialization: d.specialization ?? [],
+              npi: d.npi ?? '',
+              bio: d.bio ?? '',
+            })),
+          })
+          locationForm.reset({
+            locations: data.locations.map((l) => ({
+              address: l.address,
+              phone: l.phone ?? '',
+              hours: l.hours ?? {},
+              primary: l.primary ?? false,
+            })),
+          })
+          setSelectedServices(new Set(data.services))
+        }
+      } catch {
+        // Failed to load
+      } finally {
+        setLoading(false)
+      }
+    }
+    void fetchProfile()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // ── Save handlers ──────────────────────────────
+  async function saveProfile(data: ProfileFormData): Promise<void> {
+    setSaving(true)
+    try {
+      const response = await fetch('/api/practice/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: data.name,
+          vertical: data.vertical,
+          description: data.description,
+        }),
+      })
+      if (response.ok) setToast('Saved! Profile updated successfully.')
+    } catch {
+      // Failed
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function saveDoctors(data: DoctorFormData): Promise<void> {
+    setSaving(true)
+    try {
+      const response = await fetch('/api/practice/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ doctors: data.doctors }),
+      })
+      if (response.ok) setToast('Saved! Doctors updated successfully.')
+    } catch {
+      // Failed
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function saveServices(): Promise<void> {
+    setSaving(true)
+    try {
+      const response = await fetch('/api/practice/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ services: Array.from(selectedServices) }),
+      })
+      if (response.ok) setToast('Saved! Services updated successfully.')
+    } catch {
+      // Failed
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function saveLocations(data: LocationFormData): Promise<void> {
+    setSaving(true)
+    try {
+      const response = await fetch('/api/practice/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ locations: data.locations }),
+      })
+      if (response.ok) setToast('Saved! Locations updated successfully.')
+    } catch {
+      // Failed
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function toggleService(service: string): void {
+    setSelectedServices((prev) => {
+      const next = new Set(prev)
+      if (next.has(service)) next.delete(service)
+      else next.add(service)
+      return next
+    })
+  }
+
+  function addDoctor(): void {
+    appendDoctor({ name: '', title: '', specialization: [], npi: '', bio: '' })
+  }
+
+  function addLocation(): void {
+    appendLocation({ address: '', phone: '', hours: {}, primary: false })
   }
 
   const tabs: { id: TabType; label: string; icon: LucideIcon }[] = [
-    { id: 'profile', label: 'Profile', icon: User },
-    { id: 'billing', label: 'Billing', icon: CreditCard },
-    { id: 'preferences', label: 'Preferences', icon: Bell },
+    { id: 'profile', label: 'Practice Profile', icon: User },
+    { id: 'doctors', label: 'Doctors', icon: Stethoscope },
+    { id: 'services', label: 'Services', icon: ClipboardList },
+    { id: 'locations', label: 'Locations', icon: MapPin },
+    { id: 'connected', label: 'Connected Accounts', icon: Link2 },
   ]
+
+  if (loading) {
+    return (
+      <div className="space-y-8">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Settings</h1>
+          <p className="text-gray-600">Manage your practice information and preferences.</p>
+        </div>
+        <SettingsSkeleton />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-8">
@@ -68,318 +376,443 @@ export default function PracticeSettings() {
         {/* Content Area */}
         <div className="lg:col-span-3">
           <div className="bg-white rounded-2xl border border-gray-200 p-8 shadow-sm">
-            {/* Profile Tab */}
+            {/* ── Tab 1: Practice Profile ─────────── */}
             {activeTab === 'profile' && (
-              <div className="space-y-6">
+              <form onSubmit={(e) => void profileForm.handleSubmit(saveProfile)(e)} className="space-y-6">
                 <div>
                   <h2 className="text-2xl font-bold text-gray-900 mb-2">Practice Profile</h2>
-                  <p className="text-gray-600">Update your practice information and contact details.</p>
+                  <p className="text-gray-600">Update your practice information.</p>
                 </div>
 
                 <div className="space-y-4">
                   <div>
-                    <label htmlFor="practiceName" className="block text-sm font-medium text-gray-900 mb-2">
-                      Practice Name
-                    </label>
+                    <label className="block text-sm font-medium text-gray-900 mb-2">Practice Name</label>
                     <input
-                      id="practiceName"
-                      type="text"
-                      value={practiceName}
-                      onChange={(e) => setPracticeName(e.target.value)}
+                      {...profileForm.register('name')}
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
-                  </div>
-
-                  <div>
-                    <label htmlFor="website" className="block text-sm font-medium text-gray-900 mb-2">
-                      Website URL
-                    </label>
-                    <input
-                      id="website"
-                      type="text"
-                      value={website}
-                      onChange={(e) => setWebsite(e.target.value)}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <div>
-                      <label htmlFor="email" className="block text-sm font-medium text-gray-900 mb-2">
-                        Email Address
-                      </label>
-                      <input
-                        id="email"
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
-                    </div>
-
-                    <div>
-                      <label htmlFor="phone" className="block text-sm font-medium text-gray-900 mb-2">
-                        Phone Number
-                      </label>
-                      <input
-                        id="phone"
-                        type="tel"
-                        value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label htmlFor="address" className="block text-sm font-medium text-gray-900 mb-2">
-                      Practice Address
-                    </label>
-                    <input
-                      id="address"
-                      type="text"
-                      value={address}
-                      onChange={(e) => setAddress(e.target.value)}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-end pt-6 border-t border-gray-200">
-                  <button
-                    onClick={handleSave}
-                    className="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg font-semibold hover:shadow-lg hover:shadow-blue-500/30 transition-all"
-                  >
-                    {saved ? (
-                      <>
-                        <Check className="w-5 h-5" />
-                        <span>Saved!</span>
-                      </>
-                    ) : (
-                      <>
-                        <Save className="w-5 h-5" />
-                        <span>Save Changes</span>
-                      </>
+                    {profileForm.formState.errors.name && (
+                      <p className="text-sm text-red-600 mt-1">{profileForm.formState.errors.name.message}</p>
                     )}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Billing Tab */}
-            {activeTab === 'billing' && (
-              <div className="space-y-6">
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-900 mb-2">Billing & Subscription</h2>
-                  <p className="text-gray-600">Manage your subscription and payment methods.</p>
-                </div>
-
-                {/* Current Plan */}
-                <div className="p-6 bg-gradient-to-br from-blue-50 to-transparent rounded-xl border border-blue-200">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <h3 className="text-lg font-bold text-gray-900">Pro Plan</h3>
-                      <p className="text-sm text-gray-600">$499 per month</p>
-                    </div>
-                    <div className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-semibold">
-                      Active
-                    </div>
                   </div>
-                  <div className="space-y-2 text-sm text-gray-700">
-                    <div className="flex items-center space-x-2">
-                      <Check className="w-4 h-4 text-green-600" />
-                      <span>8 blog posts per month</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Check className="w-4 h-4 text-green-600" />
-                      <span>Advanced SEO audit</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Check className="w-4 h-4 text-green-600" />
-                      <span>Competitor tracking (5 competitors)</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Check className="w-4 h-4 text-green-600" />
-                      <span>Priority support</span>
-                    </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-900 mb-2">Website URL</label>
+                    <input
+                      value={profileData?.domain ?? ''}
+                      readOnly
+                      className="w-full px-4 py-3 border border-gray-200 rounded-lg bg-gray-50 text-gray-500 cursor-not-allowed"
+                    />
                   </div>
-                  <div className="mt-4 pt-4 border-t border-blue-200">
-                    <button className="text-blue-600 hover:text-blue-700 text-sm font-medium">
-                      Change Plan
-                    </button>
-                  </div>
-                </div>
 
-                {/* Payment Method */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-bold text-gray-900">Payment Method</h3>
-                  <div className="p-4 border border-gray-200 rounded-lg flex items-center justify-between">
-                    <div className="flex items-center space-x-4">
-                      <div className="w-12 h-8 bg-gradient-to-r from-blue-600 to-blue-800 rounded flex items-center justify-center text-white text-xs font-bold">
-                        VISA
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">•••• •••• •••• 4242</p>
-                        <p className="text-xs text-gray-600">Expires 12/2025</p>
-                      </div>
-                    </div>
-                    <button className="text-blue-600 hover:text-blue-700 text-sm font-medium">
-                      Update
-                    </button>
-                  </div>
-                </div>
-
-                {/* Billing History */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-bold text-gray-900">Recent Invoices</h3>
-                  <div className="space-y-2">
-                    {[
-                      { date: 'Feb 1, 2025', amount: '$499.00', status: 'paid' },
-                      { date: 'Jan 1, 2025', amount: '$499.00', status: 'paid' },
-                      { date: 'Dec 1, 2024', amount: '$499.00', status: 'paid' },
-                    ].map((invoice, index) => (
-                      <div
-                        key={index}
-                        className="p-4 border border-gray-200 rounded-lg flex items-center justify-between hover:bg-gray-50 transition-colors"
-                      >
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">{invoice.date}</p>
-                          <p className="text-xs text-gray-600">{invoice.amount}</p>
-                        </div>
-                        <div className="flex items-center space-x-3">
-                          <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-semibold">
-                            Paid
-                          </span>
-                          <button className="text-blue-600 hover:text-blue-700 text-sm font-medium">
-                            Download
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Preferences Tab */}
-            {activeTab === 'preferences' && (
-              <div className="space-y-6">
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-900 mb-2">Preferences</h2>
-                  <p className="text-gray-600">Customize your notifications and automation settings.</p>
-                </div>
-
-                {/* Notifications */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-bold text-gray-900">Email Notifications</h3>
-
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">Email Notifications</p>
-                        <p className="text-xs text-gray-600">Receive email updates about your account</p>
-                      </div>
-                      <button
-                        onClick={() => setEmailNotifications(!emailNotifications)}
-                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                          emailNotifications ? 'bg-blue-600' : 'bg-gray-300'
-                        }`}
-                      >
-                        <span
-                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                            emailNotifications ? 'translate-x-6' : 'translate-x-1'
-                          }`}
-                        />
-                      </button>
-                    </div>
-
-                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">Weekly Reports</p>
-                        <p className="text-xs text-gray-600">Receive weekly performance summaries</p>
-                      </div>
-                      <button
-                        onClick={() => setWeeklyReports(!weeklyReports)}
-                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                          weeklyReports ? 'bg-blue-600' : 'bg-gray-300'
-                        }`}
-                      >
-                        <span
-                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                            weeklyReports ? 'translate-x-6' : 'translate-x-1'
-                          }`}
-                        />
-                      </button>
-                    </div>
-
-                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">Content Approvals</p>
-                        <p className="text-xs text-gray-600">Get notified when content needs approval</p>
-                      </div>
-                      <button
-                        onClick={() => setContentApprovals(!contentApprovals)}
-                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                          contentApprovals ? 'bg-blue-600' : 'bg-gray-300'
-                        }`}
-                      >
-                        <span
-                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                            contentApprovals ? 'translate-x-6' : 'translate-x-1'
-                          }`}
-                        />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Automation */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-bold text-gray-900">Automation Settings</h3>
-
-                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">Auto-Publish Content</p>
-                      <p className="text-xs text-gray-600">Automatically publish approved blog posts</p>
-                    </div>
-                    <button
-                      onClick={() => setAutoPublish(!autoPublish)}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                        autoPublish ? 'bg-blue-600' : 'bg-gray-300'
-                      }`}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-900 mb-2">Vertical</label>
+                    <select
+                      {...profileForm.register('vertical')}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
-                      <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                          autoPublish ? 'translate-x-6' : 'translate-x-1'
-                        }`}
-                      />
-                    </button>
+                      {VERTICALS.map((v) => (
+                        <option key={v} value={v}>
+                          {v.charAt(0).toUpperCase() + v.slice(1)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-900 mb-2">Description</label>
+                    <textarea
+                      {...profileForm.register('description')}
+                      rows={4}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                      placeholder="Describe your practice..."
+                    />
                   </div>
                 </div>
 
                 <div className="flex items-center justify-end pt-6 border-t border-gray-200">
                   <button
-                    onClick={handleSave}
-                    className="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg font-semibold hover:shadow-lg hover:shadow-blue-500/30 transition-all"
+                    type="submit"
+                    disabled={saving}
+                    className="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg font-semibold hover:shadow-lg hover:shadow-blue-500/30 transition-all disabled:opacity-50"
                   >
-                    {saved ? (
-                      <>
-                        <Check className="w-5 h-5" />
-                        <span>Saved!</span>
-                      </>
-                    ) : (
-                      <>
-                        <Save className="w-5 h-5" />
-                        <span>Save Preferences</span>
-                      </>
-                    )}
+                    <Save className="w-5 h-5" />
+                    <span>{saving ? 'Saving...' : 'Save Changes'}</span>
                   </button>
+                </div>
+              </form>
+            )}
+
+            {/* ── Tab 2: Doctors ──────────────────── */}
+            {activeTab === 'doctors' && (
+              <form onSubmit={(e) => void doctorForm.handleSubmit(saveDoctors)(e)} className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-900 mb-2">Doctors</h2>
+                    <p className="text-gray-600">Manage your practice&apos;s dental professionals.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={addDoctor}
+                    className="flex items-center space-x-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Add Doctor</span>
+                  </button>
+                </div>
+
+                {doctorFields.length === 0 && (
+                  <div className="text-center py-8 text-gray-500">
+                    <Stethoscope className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                    <p>No doctors added yet. Click &quot;Add Doctor&quot; to get started.</p>
+                  </div>
+                )}
+
+                <div className="space-y-6">
+                  {doctorFields.map((field, index) => (
+                    <div key={field.id} className="p-6 border border-gray-200 rounded-xl space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-lg font-semibold text-gray-900">Doctor {index + 1}</h3>
+                        <button
+                          type="button"
+                          onClick={() => removeDoctor(index)}
+                          className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Remove Doctor"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      <div className="grid md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                          <input
+                            {...doctorForm.register(`doctors.${index}.name`)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="Dr. Jane Smith"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                          <input
+                            {...doctorForm.register(`doctors.${index}.title`)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="DDS, FAGD"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Specialization</label>
+                        <div className="flex flex-wrap gap-2">
+                          {SPECIALIZATIONS.map((spec) => {
+                            const current = doctorForm.watch(`doctors.${index}.specialization`) ?? []
+                            const isSelected = current.includes(spec)
+                            return (
+                              <button
+                                key={spec}
+                                type="button"
+                                onClick={() => {
+                                  const updated = isSelected
+                                    ? current.filter((s: string) => s !== spec)
+                                    : [...current, spec]
+                                  doctorForm.setValue(`doctors.${index}.specialization`, updated)
+                                }}
+                                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                                  isSelected
+                                    ? 'bg-blue-100 text-blue-700 border border-blue-300'
+                                    : 'bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200'
+                                }`}
+                              >
+                                {spec}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="grid md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">NPI Number</label>
+                          <input
+                            {...doctorForm.register(`doctors.${index}.npi`)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="1234567890"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Bio</label>
+                        <textarea
+                          {...doctorForm.register(`doctors.${index}.bio`)}
+                          rows={3}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                          placeholder="Brief biography..."
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex items-center justify-end pt-6 border-t border-gray-200">
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg font-semibold hover:shadow-lg hover:shadow-blue-500/30 transition-all disabled:opacity-50"
+                  >
+                    <Save className="w-5 h-5" />
+                    <span>{saving ? 'Saving...' : 'Save Doctors'}</span>
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* ── Tab 3: Services ─────────────────── */}
+            {activeTab === 'services' && (
+              <div className="space-y-6">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900 mb-2">Services</h2>
+                  <p className="text-gray-600">Select the services your practice offers.</p>
+                </div>
+
+                <div className="space-y-6">
+                  {Object.entries(SERVICE_CATEGORIES).map(([category, services]) => (
+                    <div key={category}>
+                      <h3 className="text-lg font-semibold text-gray-900 mb-3">{category}</h3>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                        {services.map((service) => (
+                          <label
+                            key={service}
+                            className="flex items-center space-x-3 p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer transition-colors"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedServices.has(service)}
+                              onChange={() => toggleService(service)}
+                              className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <span className="text-sm text-gray-700">{service}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex items-center justify-end pt-6 border-t border-gray-200">
+                  <button
+                    onClick={() => void saveServices()}
+                    disabled={saving}
+                    className="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg font-semibold hover:shadow-lg hover:shadow-blue-500/30 transition-all disabled:opacity-50"
+                  >
+                    <Save className="w-5 h-5" />
+                    <span>{saving ? 'Saving...' : 'Save Services'}</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* ── Tab 4: Locations ────────────────── */}
+            {activeTab === 'locations' && (
+              <form onSubmit={(e) => void locationForm.handleSubmit(saveLocations)(e)} className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-900 mb-2">Locations</h2>
+                    <p className="text-gray-600">Manage your practice locations and hours.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={addLocation}
+                    className="flex items-center space-x-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Add Location</span>
+                  </button>
+                </div>
+
+                {locationFields.length === 0 && (
+                  <div className="text-center py-8 text-gray-500">
+                    <MapPin className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                    <p>No locations added yet. Click &quot;Add Location&quot; to get started.</p>
+                  </div>
+                )}
+
+                <div className="space-y-6">
+                  {locationFields.map((field, index) => (
+                    <div key={field.id} className="p-6 border border-gray-200 rounded-xl space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          <h3 className="text-lg font-semibold text-gray-900">Location {index + 1}</h3>
+                          <label className="flex items-center space-x-2 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="primaryLocation"
+                              checked={locationForm.watch(`locations.${index}.primary`)}
+                              onChange={() => {
+                                locationFields.forEach((_, i) => {
+                                  locationForm.setValue(`locations.${i}.primary`, i === index)
+                                })
+                              }}
+                              className="w-4 h-4 text-blue-600 focus:ring-blue-500"
+                            />
+                            <span className="text-xs font-medium text-gray-600">Primary</span>
+                          </label>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeLocation(index)}
+                          className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Remove Location"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      <div className="grid md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                          <input
+                            {...locationForm.register(`locations.${index}.address`)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="123 Main St, City, State ZIP"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                          <input
+                            {...locationForm.register(`locations.${index}.phone`)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="(555) 123-4567"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Hours Grid */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Hours</label>
+                        <div className="space-y-2">
+                          {DAYS.map((day) => (
+                            <div key={day} className="flex items-center space-x-3">
+                              <span className="w-10 text-sm font-medium text-gray-600">{day}</span>
+                              <input
+                                value={locationForm.watch(`locations.${index}.hours.${day}`) ?? ''}
+                                onChange={(e) =>
+                                  locationForm.setValue(
+                                    `locations.${index}.hours.${day}`,
+                                    e.target.value
+                                  )
+                                }
+                                className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                placeholder="9:00 AM - 5:00 PM"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex items-center justify-end pt-6 border-t border-gray-200">
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg font-semibold hover:shadow-lg hover:shadow-blue-500/30 transition-all disabled:opacity-50"
+                  >
+                    <Save className="w-5 h-5" />
+                    <span>{saving ? 'Saving...' : 'Save Locations'}</span>
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* ── Tab 5: Connected Accounts ───────── */}
+            {activeTab === 'connected' && (
+              <div className="space-y-6">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900 mb-2">Connected Accounts</h2>
+                  <p className="text-gray-600">Manage your Google and CMS integrations.</p>
+                </div>
+
+                {/* Google Services */}
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Google Services</h3>
+                  <div className="space-y-3">
+                    {[
+                      { label: 'Google Search Console (GSC)', key: 'gsc' as const },
+                      { label: 'Google Analytics (GA)', key: 'ga' as const },
+                      { label: 'Google Business Profile (GBP)', key: 'gbp' as const },
+                    ].map((service) => {
+                      const isConnected = profileData?.connectedAccounts.google[service.key] ?? false
+                      return (
+                        <div
+                          key={service.key}
+                          className="flex items-center justify-between p-4 border border-gray-200 rounded-lg"
+                        >
+                          <div className="flex items-center space-x-3">
+                            <div
+                              className={`w-3 h-3 rounded-full ${
+                                isConnected ? 'bg-green-500' : 'bg-orange-400'
+                              }`}
+                            />
+                            <div>
+                              <p className="text-sm font-medium text-gray-900">{service.label}</p>
+                              <p className="text-xs text-gray-500">
+                                {isConnected ? 'Connected' : 'Disconnected'}
+                                {isConnected &&
+                                  profileData?.connectedAccounts.google.lastSync &&
+                                  ` · Last sync: ${new Date(profileData.connectedAccounts.google.lastSync).toLocaleDateString()}`}
+                              </p>
+                            </div>
+                          </div>
+                          {!isConnected && (
+                            <button className="px-4 py-2 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors">
+                              Reconnect
+                            </button>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* CMS */}
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">CMS Integration</h3>
+                  <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+                    <div className="flex items-center space-x-3">
+                      <div
+                        className={`w-3 h-3 rounded-full ${
+                          profileData?.connectedAccounts.cms.connected ? 'bg-green-500' : 'bg-orange-400'
+                        }`}
+                      />
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">
+                          CMS {profileData?.connectedAccounts.cms.type ? `(${profileData.connectedAccounts.cms.type})` : ''}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {profileData?.connectedAccounts.cms.connected ? 'Connected' : 'Disconnected'}
+                          {profileData?.connectedAccounts.cms.lastSync &&
+                            ` · Last sync: ${new Date(profileData.connectedAccounts.cms.lastSync).toLocaleDateString()}`}
+                        </p>
+                      </div>
+                    </div>
+                    {!profileData?.connectedAccounts.cms.connected && (
+                      <button className="px-4 py-2 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors">
+                        Reconnect
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
           </div>
         </div>
       </div>
+
+      {/* Toast */}
+      {toast && <Toast message={toast} onClose={() => setToast(null)} />}
     </div>
   )
 }
