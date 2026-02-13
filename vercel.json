@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/publish-gbp",
       "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/weekly-pipeline",
+      "schedule": "0 6 * * 1"
     }
   ]
 }
