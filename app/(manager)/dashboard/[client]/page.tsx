@@ -19,6 +19,7 @@ import {
   ArrowDown,
   Minus,
 } from 'lucide-react'
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
 interface KeywordRow {
@@ -63,59 +64,35 @@ const statusIcons = {
   failed: { icon: XCircle, color: 'text-red-600' },
 }
 
-const mockClient = {
-  id: 'cl1',
-  name: 'Smith Family Dental',
-  domain: 'smithdental.com',
-  healthScore: 85,
-  managementMode: 'managed',
-  pendingCount: 3,
+interface ClientData {
+  name: string
+  domain: string
+  health_score: number
+  management_mode: string
+  id: string
 }
 
-const mockTrafficData = [
-  { date: 'Week 1', visitors: 420 },
-  { date: 'Week 2', visitors: 480 },
-  { date: 'Week 3', visitors: 520 },
-  { date: 'Week 4', visitors: 610 },
-]
+interface AgentActionItem {
+  id: string
+  agent: string
+  action_type: string
+  description: string
+  status: string
+  created_at: string
+  deployed_at: string | null
+}
 
-const mockAgentActivity = [
-  {
-    id: 1,
-    agent: 'ghostwriter',
-    task: 'Published blog post: "10 Signs You Need a Dental Crown"',
-    status: 'completed',
-    timestamp: '2025-02-11T14:30:00Z',
-  },
-  {
-    id: 2,
-    agent: 'scholar',
-    task: 'Completed keyword research for "dental implants bentonville"',
-    status: 'completed',
-    timestamp: '2025-02-11T10:15:00Z',
-  },
-  {
-    id: 3,
-    agent: 'conductor',
-    task: 'Optimized 5 images across website for faster loading',
-    status: 'completed',
-    timestamp: '2025-02-10T16:45:00Z',
-  },
-  {
-    id: 4,
-    agent: 'ghostwriter',
-    task: 'Drafted blog post: "Understanding Root Canal Treatment"',
-    status: 'pending',
-    timestamp: '2025-02-10T09:00:00Z',
-  },
-  {
-    id: 5,
-    agent: 'analyst',
-    task: 'Generated monthly SEO performance report',
-    status: 'completed',
-    timestamp: '2025-02-09T11:30:00Z',
-  },
-]
+interface ClientDetailData {
+  client: ClientData
+  recent_actions: AgentActionItem[]
+  pending_count: number
+  keyword_summary: {
+    total: number
+    improving_count: number
+    page_1_count: number
+  }
+  content_count: number
+}
 
 type SortField = 'keyword' | 'position' | 'search_volume' | 'difficulty'
 type SortOrder = 'asc' | 'desc'
@@ -175,6 +152,76 @@ export default function ClientOverview({ params }: { params: Promise<{ client: s
   const [sortField, setSortField] = useState<SortField>('search_volume')
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
   const [typeFilter, setTypeFilter] = useState<string>('')
+  const [clientDetail, setClientDetail] = useState<ClientDetailData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [runningAgent, setRunningAgent] = useState<string | null>(null)
+
+  // Fetch client detail
+  useEffect(() => {
+    async function fetchClientDetail(): Promise<void> {
+      try {
+        const response = await fetch(`/api/clients/${clientId}`)
+        if (response.ok) {
+          const data: ClientDetailData = await response.json()
+          setClientDetail(data)
+        }
+      } catch {
+        // Failed to load
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    void fetchClientDetail()
+  }, [clientId])
+
+  const clientData = clientDetail?.client
+  const recentActions = clientDetail?.recent_actions ?? []
+  const pendingActions = recentActions.filter((a) => a.status === 'pending')
+  const pendingCount = clientDetail?.pending_count ?? 0
+
+  const handleRunAgent = async (agentName: string): Promise<void> => {
+    setRunningAgent(agentName)
+    try {
+      await fetch('/api/agents/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId, agentName }),
+      })
+    } catch {
+      // Failed
+    } finally {
+      setRunningAgent(null)
+    }
+  }
+
+  const handleApprove = async (actionId: string): Promise<void> => {
+    try {
+      await fetch(`/api/queue/${actionId}/approve`, { method: 'POST' })
+      // Re-fetch client detail
+      const response = await fetch(`/api/clients/${clientId}`)
+      if (response.ok) {
+        const data: ClientDetailData = await response.json()
+        setClientDetail(data)
+      }
+    } catch {
+      // Failed
+    }
+  }
+
+  const handleReject = async (actionId: string): Promise<void> => {
+    try {
+      await fetch(`/api/queue/${actionId}/reject`, { method: 'POST' })
+      // Re-fetch client detail
+      const response = await fetch(`/api/clients/${clientId}`)
+      if (response.ok) {
+        const data: ClientDetailData = await response.json()
+        setClientDetail(data)
+      }
+    } catch {
+      // Failed
+    }
+  }
 
   const fetchKeywords = useCallback(async (): Promise<void> => {
     try {
@@ -249,24 +296,40 @@ export default function ClientOverview({ params }: { params: Promise<{ client: s
             <ArrowLeft className="w-5 h-5 text-gray-600" />
           </Link>
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">{mockClient.name}</h1>
-            <a
-              href={`https://${mockClient.domain}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center space-x-2 text-gray-600 hover:text-blue-600 transition-colors"
-            >
-              <ExternalLink className="w-4 h-4" />
-              <span>{mockClient.domain}</span>
-            </a>
+            <h1 className="text-3xl font-bold text-gray-900">{clientData?.name ?? 'Loading...'}</h1>
+            {clientData?.domain && (
+              <a
+                href={`https://${clientData.domain}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center space-x-2 text-gray-600 hover:text-blue-600 transition-colors"
+              >
+                <ExternalLink className="w-4 h-4" />
+                <span>{clientData.domain}</span>
+              </a>
+            )}
           </div>
         </div>
 
-        {/* Health Score */}
+        {/* Agent Run Buttons + Health Score */}
         <div className="flex items-center space-x-4">
+          <button
+            onClick={() => void handleRunAgent('scholar')}
+            disabled={runningAgent !== null}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+          >
+            {runningAgent === 'scholar' ? 'Running...' : 'Run Audit'}
+          </button>
+          <button
+            onClick={() => void handleRunAgent('conductor')}
+            disabled={runningAgent !== null}
+            className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 disabled:opacity-50 transition-colors"
+          >
+            {runningAgent === 'conductor' ? 'Running...' : 'Generate Content'}
+          </button>
           <div className="text-right">
             <div className="text-sm text-gray-600">Health Score</div>
-            <div className="text-2xl font-bold text-gray-900">{mockClient.healthScore}/100</div>
+            <div className="text-2xl font-bold text-gray-900">{clientData?.health_score ?? 0}/100</div>
           </div>
           <div className="relative w-16 h-16">
             <svg className="w-full h-full transform -rotate-90">
@@ -279,7 +342,7 @@ export default function ClientOverview({ params }: { params: Promise<{ client: s
                 stroke="#10B981"
                 strokeWidth="6"
                 strokeDasharray={`${2 * Math.PI * 28}`}
-                strokeDashoffset={`${2 * Math.PI * 28 * (1 - mockClient.healthScore / 100)}`}
+                strokeDashoffset={`${2 * Math.PI * 28 * (1 - (clientData?.health_score ?? 0) / 100)}`}
                 strokeLinecap="round"
               />
             </svg>
@@ -350,36 +413,14 @@ export default function ClientOverview({ params }: { params: Promise<{ client: s
           {/* Traffic Chart */}
           <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
             <h2 className="text-xl font-bold text-gray-900 mb-6">Website Traffic Trend</h2>
-            <div className="h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={mockTrafficData}>
-                  <defs>
-                    <linearGradient id="colorVisitors" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#3B82F6" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                  <XAxis dataKey="date" stroke="#9CA3AF" style={{ fontSize: '12px' }} />
-                  <YAxis stroke="#9CA3AF" style={{ fontSize: '12px' }} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#fff',
-                      border: '1px solid #E5E7EB',
-                      borderRadius: '8px',
-                      boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-                    }}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="visitors"
-                    stroke="#3B82F6"
-                    strokeWidth={2}
-                    fillOpacity={1}
-                    fill="url(#colorVisitors)"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
+            <div className="h-80 flex items-center justify-center bg-gray-50 rounded-xl">
+              <div className="text-center">
+                <Activity className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                <p className="text-gray-500 font-medium">No traffic data yet</p>
+                <p className="text-gray-400 text-sm mt-1">
+                  Traffic data will appear once GSC data starts flowing.
+                </p>
+              </div>
             </div>
           </div>
 
@@ -416,35 +457,61 @@ export default function ClientOverview({ params }: { params: Promise<{ client: s
               <h2 className="text-xl font-bold text-gray-900">AI Agent Activity</h2>
             </div>
 
-            <div className="space-y-4">
-              {mockAgentActivity.map((activity) => {
-                const agentColor = agentColors[activity.agent as keyof typeof agentColors]
-                const StatusInfo = statusIcons[activity.status as keyof typeof statusIcons]
-                const StatusIcon = StatusInfo.icon
+            {recentActions.length > 0 ? (
+              <div className="space-y-4">
+                {recentActions.map((activity) => {
+                  const agentColor = agentColors[activity.agent as keyof typeof agentColors] ?? agentColors.conductor
+                  const statusKey = activity.status === 'deployed' ? 'completed' : activity.status
+                  const StatusInfo = statusIcons[statusKey as keyof typeof statusIcons] ?? statusIcons.completed
+                  const StatusIcon = StatusInfo.icon
+                  const timestamp = activity.deployed_at ?? activity.created_at
 
-                return (
-                  <div
-                    key={activity.id}
-                    className="flex items-start space-x-4 p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"
-                  >
-                    <div className={`px-3 py-1 ${agentColor.bg} ${agentColor.text} rounded-lg text-xs font-semibold uppercase shrink-0 border ${agentColor.border}`}>
-                      {activity.agent}
-                    </div>
+                  return (
+                    <div
+                      key={activity.id}
+                      className="flex items-start space-x-4 p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"
+                    >
+                      <div className={`px-3 py-1 ${agentColor.bg} ${agentColor.text} rounded-lg text-xs font-semibold uppercase shrink-0 border ${agentColor.border}`}>
+                        {activity.agent}
+                      </div>
 
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 mb-1">{activity.task}</p>
-                      <div className="flex items-center space-x-3 text-xs text-gray-600">
-                        <span>{formatRelativeTime(activity.timestamp)}</span>
-                        <div className={`flex items-center space-x-1 ${StatusInfo.color}`}>
-                          <StatusIcon className="w-3 h-3" />
-                          <span className="font-medium capitalize">{activity.status}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 mb-1">{activity.description}</p>
+                        <div className="flex items-center space-x-3 text-xs text-gray-600">
+                          <span>{formatRelativeTime(timestamp)}</span>
+                          <div className={`flex items-center space-x-1 ${StatusInfo.color}`}>
+                            <StatusIcon className="w-3 h-3" />
+                            <span className="font-medium capitalize">{activity.status}</span>
+                          </div>
                         </div>
                       </div>
+
+                      {activity.status === 'pending' && (
+                        <div className="flex items-center space-x-2 shrink-0">
+                          <button
+                            onClick={() => void handleApprove(activity.id)}
+                            className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-medium hover:bg-green-200"
+                          >
+                            approve
+                          </button>
+                          <button
+                            onClick={() => void handleReject(activity.id)}
+                            className="px-2 py-1 bg-red-100 text-red-700 rounded text-xs font-medium hover:bg-red-200"
+                          >
+                            reject
+                          </button>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                )
-              })}
-            </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <Zap className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                <p className="text-gray-500 text-sm">No agent activity yet</p>
+              </div>
+            )}
           </div>
         </>
       )}
@@ -552,23 +619,23 @@ export default function ClientOverview({ params }: { params: Promise<{ client: s
       )}
 
       {/* Pending Items */}
-      {mockClient.pendingCount > 0 && (
+      {pendingCount > 0 && (
         <div className="bg-gradient-to-r from-orange-50 to-transparent rounded-2xl border border-orange-200 p-6">
           <div className="flex items-start justify-between">
             <div className="flex items-start space-x-3">
               <AlertCircle className="w-6 h-6 text-orange-600 mt-1" />
               <div>
                 <h3 className="text-lg font-bold text-gray-900 mb-1">
-                  {mockClient.pendingCount} Items Awaiting Approval
+                  {pendingCount} Items Awaiting Approval
                 </h3>
                 <p className="text-sm text-gray-600 mb-4">
                   These items require your review before they can be published or implemented.
                 </p>
                 <Link
-                  href="/dashboard/queue"
+                  href={`/dashboard/queue?client=${clientId}`}
                   className="inline-flex items-center space-x-2 px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-medium hover:bg-orange-700 transition-colors"
                 >
-                  <span>View Approval Queue</span>
+                  <span>Review All</span>
                   <ArrowLeft className="w-4 h-4 rotate-180" />
                 </Link>
               </div>
