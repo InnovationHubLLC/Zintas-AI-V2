@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireRole } from '@/lib/auth-helpers'
 import { runScholar } from '@packages/agents/scholar'
+import { runConductor } from '@packages/agents/conductor'
 import { createRun } from '@packages/db/queries'
 
 const RunAgentSchema = z.object({
@@ -25,6 +26,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         status: result.status,
         keywordsFound: result.keywordsFound,
         contentTopics: result.contentTopics,
+      }, { status: 202 })
+    }
+
+    if (body.agentName === 'conductor') {
+      const result = await runConductor(body.clientId, authResult.orgId)
+
+      return NextResponse.json({
+        runId: result.runId,
+        agent: 'conductor',
+        status: result.status,
+        scholarKeywords: result.scholarKeywords,
+        contentPiecesGenerated: result.contentPiecesGenerated,
       }, { status: 202 })
     }
 
