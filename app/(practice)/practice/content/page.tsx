@@ -1,9 +1,29 @@
 'use client'
 
-import { useState, useMemo } from 'react'
-import { Search, FileText, Calendar, Eye, ThumbsUp, Filter, CheckCircle, Clock, AlertCircle } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
+import { Search, FileText, Calendar, Filter, CheckCircle, Clock, AlertCircle, Grid3X3, List, Tag, ExternalLink } from 'lucide-react'
 
-const formatRelativeTime = (isoString: string) => {
+// ── Types ────────────────────────────────────────────────────────
+
+interface ContentItem {
+  id: string
+  title: string
+  content_type: string
+  status: string
+  published_at: string | null
+  created_at: string
+  word_count: number
+  target_keyword: string | null
+  published_url: string | null
+  html_body: string | null
+}
+
+type FilterType = 'all' | 'published' | 'in_review' | 'draft'
+type ViewMode = 'grid' | 'list'
+
+// ── Helpers ──────────────────────────────────────────────────────
+
+const formatRelativeTime = (isoString: string): string => {
   const date = new Date(isoString)
   const now = new Date()
   const diffMs = now.getTime() - date.getTime()
@@ -14,89 +34,76 @@ const formatRelativeTime = (isoString: string) => {
   return date.toLocaleDateString()
 }
 
-const mockContent = [
-  {
-    id: 1,
-    title: '10 Signs You Need a Dental Crown',
-    type: 'blog',
-    status: 'published',
-    publishedDate: '2025-02-08T10:00:00Z',
-    views: 342,
-    engagement: 28,
-    thumbnail: 'https://images.pexels.com/photos/3845653/pexels-photo-3845653.jpeg?auto=compress&cs=tinysrgb&w=400',
-  },
-  {
-    id: 2,
-    title: 'The Complete Guide to Teeth Whitening',
-    type: 'blog',
-    status: 'published',
-    publishedDate: '2025-02-05T14:30:00Z',
-    views: 521,
-    engagement: 45,
-    thumbnail: 'https://images.pexels.com/photos/3762453/pexels-photo-3762453.jpeg?auto=compress&cs=tinysrgb&w=400',
-  },
-  {
-    id: 3,
-    title: 'Dental Implants vs. Dentures: Which is Right for You?',
-    type: 'blog',
-    status: 'in_review',
-    publishedDate: '2025-02-10T09:00:00Z',
-    views: 0,
-    engagement: 0,
-    thumbnail: 'https://images.pexels.com/photos/6528928/pexels-photo-6528928.jpeg?auto=compress&cs=tinysrgb&w=400',
-  },
-  {
-    id: 4,
-    title: 'How to Maintain Your Oral Health After 50',
-    type: 'blog',
-    status: 'published',
-    publishedDate: '2025-02-01T11:15:00Z',
-    views: 687,
-    engagement: 52,
-    thumbnail: 'https://images.pexels.com/photos/5355919/pexels-photo-5355919.jpeg?auto=compress&cs=tinysrgb&w=400',
-  },
-  {
-    id: 5,
-    title: 'Understanding Root Canal Treatment',
-    type: 'blog',
-    status: 'draft',
-    publishedDate: '2025-02-12T08:00:00Z',
-    views: 0,
-    engagement: 0,
-    thumbnail: 'https://images.pexels.com/photos/3845653/pexels-photo-3845653.jpeg?auto=compress&cs=tinysrgb&w=400',
-  },
-  {
-    id: 6,
-    title: 'Top 5 Foods That Strengthen Your Teeth',
-    type: 'blog',
-    status: 'published',
-    publishedDate: '2025-01-28T15:45:00Z',
-    views: 893,
-    engagement: 67,
-    thumbnail: 'https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=400',
-  },
-]
+const statusConfig: Record<string, { icon: typeof CheckCircle; color: string; bg: string; label: string }> = {
+  published: { icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-100', label: 'Published' },
+  approved: { icon: CheckCircle, color: 'text-blue-600', bg: 'bg-blue-100', label: 'Approved' },
+  in_review: { icon: Clock, color: 'text-yellow-600', bg: 'bg-yellow-100', label: 'In Review' },
+  draft: { icon: AlertCircle, color: 'text-gray-600', bg: 'bg-gray-100', label: 'Draft' },
+  rejected: { icon: AlertCircle, color: 'text-red-600', bg: 'bg-red-100', label: 'Rejected' },
+}
 
-type FilterType = 'all' | 'published' | 'in_review' | 'draft'
+// ── Skeleton ─────────────────────────────────────────────────────
 
-export default function ContentLibrary() {
+function ContentSkeleton(): React.ReactElement {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {Array.from({ length: 4 }).map((_, i) => (
+        <div key={i} className="bg-white rounded-2xl border border-gray-200 p-6 animate-pulse">
+          <div className="flex items-center justify-between mb-4">
+            <div className="w-20 h-6 bg-gray-200 rounded-full" />
+            <div className="w-16 h-5 bg-gray-200 rounded" />
+          </div>
+          <div className="w-3/4 h-5 bg-gray-200 rounded mb-3" />
+          <div className="w-1/2 h-4 bg-gray-200 rounded mb-4" />
+          <div className="flex justify-between">
+            <div className="w-24 h-4 bg-gray-200 rounded" />
+            <div className="w-20 h-4 bg-gray-200 rounded" />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ── Main Component ───────────────────────────────────────────────
+
+export default function ContentLibrary(): React.ReactElement {
+  const [items, setItems] = useState<ContentItem[]>([])
+  const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [activeFilter, setActiveFilter] = useState<FilterType>('all')
+  const [viewMode, setViewMode] = useState<ViewMode>('grid')
+
+  useEffect(() => {
+    async function fetchContent(): Promise<void> {
+      try {
+        const response = await fetch('/api/practice/content')
+        if (response.ok) {
+          const data: ContentItem[] = await response.json()
+          setItems(data)
+        }
+      } catch {
+        // Failed to load
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    void fetchContent()
+  }, [])
 
   const filteredContent = useMemo(() => {
-    return mockContent.filter(item => {
-      const matchesSearch = searchQuery === '' ||
+    return items.filter((item) => {
+      const matchesSearch =
+        searchQuery === '' ||
         item.title.toLowerCase().includes(searchQuery.toLowerCase())
-      const matchesFilter = activeFilter === 'all' ? true : item.status === activeFilter
+      const matchesFilter =
+        activeFilter === 'all' ||
+        item.status === activeFilter ||
+        (activeFilter === 'in_review' && item.status === 'in_review')
       return matchesSearch && matchesFilter
     })
-  }, [searchQuery, activeFilter])
-
-  const statusConfig = {
-    published: { icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-100', label: 'Published' },
-    in_review: { icon: Clock, color: 'text-yellow-600', bg: 'bg-yellow-100', label: 'In Review' },
-    draft: { icon: AlertCircle, color: 'text-gray-600', bg: 'bg-gray-100', label: 'Draft' },
-  }
+  }, [items, searchQuery, activeFilter])
 
   return (
     <div className="space-y-6">
@@ -106,7 +113,7 @@ export default function ContentLibrary() {
         <p className="text-gray-600">Manage your blog posts, articles, and marketing content.</p>
       </div>
 
-      {/* Search and Filters */}
+      {/* Search, Filters, and View Toggle */}
       <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
         <div className="flex flex-col md:flex-row gap-4">
           {/* Search */}
@@ -114,7 +121,7 @@ export default function ContentLibrary() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
               type="text"
-              placeholder="Search content..."
+              placeholder="Search content by title..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -134,96 +141,157 @@ export default function ContentLibrary() {
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                 }`}
               >
-                {filter === 'all' ? 'All' : filter.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                {filter === 'all'
+                  ? 'All'
+                  : filter.replace('_', ' ').replace(/\b\w/g, (l) => l.toUpperCase())}
               </button>
             ))}
+          </div>
+
+          {/* View Toggle */}
+          <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden">
+            <button
+              onClick={() => setViewMode('grid')}
+              className={`p-2.5 ${viewMode === 'grid' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}
+              title="Grid view"
+            >
+              <Grid3X3 className="w-5 h-5" />
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`p-2.5 ${viewMode === 'list' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}
+              title="List view"
+            >
+              <List className="w-5 h-5" />
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Content Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {filteredContent.map((item) => {
-          const StatusIcon = statusConfig[item.status as keyof typeof statusConfig].icon
-          const statusInfo = statusConfig[item.status as keyof typeof statusConfig]
+      {/* Loading */}
+      {loading && <ContentSkeleton />}
 
-          return (
-            <div
-              key={item.id}
-              className="group bg-white rounded-2xl border border-gray-200 overflow-hidden hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
-            >
-              {/* Thumbnail */}
-              <div className="relative h-48 overflow-hidden bg-gray-100">
-                <img
-                  src={item.thumbnail}
-                  alt={item.title}
-                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                />
-                <div className="absolute top-3 right-3">
-                  <div className={`flex items-center space-x-1 px-3 py-1 ${statusInfo.bg} rounded-full backdrop-blur-sm`}>
-                    <StatusIcon className={`w-4 h-4 ${statusInfo.color}`} />
-                    <span className={`text-xs font-semibold ${statusInfo.color}`}>
-                      {statusInfo.label}
+      {/* Content Grid */}
+      {!loading && viewMode === 'grid' && filteredContent.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {filteredContent.map((item) => {
+            const statusInfo = statusConfig[item.status] ?? statusConfig.draft
+
+            return (
+              <div
+                key={item.id}
+                className="group bg-white rounded-2xl border border-gray-200 overflow-hidden hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
+              >
+                <div className="p-6">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className={`flex items-center space-x-1 px-3 py-1 ${statusInfo.bg} rounded-full`}>
+                      <statusInfo.icon className={`w-4 h-4 ${statusInfo.color}`} />
+                      <span className={`text-xs font-semibold ${statusInfo.color}`}>
+                        {statusInfo.label}
+                      </span>
+                    </div>
+                    <span className="text-xs font-medium text-gray-500 capitalize">
+                      {item.content_type.replace('_', ' ')}
                     </span>
                   </div>
-                </div>
-              </div>
 
-              {/* Content */}
-              <div className="p-6">
-                <h3 className="text-lg font-bold text-gray-900 mb-3 line-clamp-2 group-hover:text-blue-600 transition-colors">
-                  {item.title}
-                </h3>
+                  <h3 className="text-lg font-bold text-gray-900 mb-2 line-clamp-2 group-hover:text-blue-600 transition-colors">
+                    {item.title}
+                  </h3>
 
-                <div className="flex items-center justify-between text-sm text-gray-600 mb-4">
-                  <div className="flex items-center space-x-2">
-                    <Calendar className="w-4 h-4" />
-                    <span>{formatRelativeTime(item.publishedDate)}</span>
-                  </div>
-                  <div className="flex items-center space-x-1">
-                    <FileText className="w-4 h-4" />
-                    <span className="capitalize">{item.type}</span>
-                  </div>
-                </div>
-
-                {item.status === 'published' && (
-                  <div className="flex items-center justify-between pt-4 border-t border-gray-100">
-                    <div className="flex items-center space-x-2">
-                      <div className="flex items-center space-x-1 text-sm text-gray-600">
-                        <Eye className="w-4 h-4" />
-                        <span>{item.views}</span>
-                      </div>
-                      <div className="w-1 h-1 bg-gray-300 rounded-full" />
-                      <div className="flex items-center space-x-1 text-sm text-gray-600">
-                        <ThumbsUp className="w-4 h-4" />
-                        <span>{item.engagement}</span>
-                      </div>
+                  {item.target_keyword && (
+                    <div className="flex items-center space-x-1 mb-3">
+                      <Tag className="w-3.5 h-3.5 text-blue-500" />
+                      <span className="text-xs text-blue-600 font-medium">{item.target_keyword}</span>
                     </div>
-                    <button className="text-blue-600 hover:text-blue-700 text-sm font-medium">
-                      View Details →
-                    </button>
-                  </div>
-                )}
+                  )}
 
-                {item.status !== 'published' && (
-                  <div className="pt-4 border-t border-gray-100">
-                    <button className="w-full py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg text-sm font-medium hover:shadow-lg hover:shadow-blue-500/30 transition-all">
-                      {item.status === 'in_review' ? 'Review Content' : 'Continue Editing'}
-                    </button>
+                  <div className="flex items-center justify-between text-sm text-gray-600 pt-3 border-t border-gray-100">
+                    <div className="flex items-center space-x-2">
+                      <Calendar className="w-4 h-4" />
+                      <span>{formatRelativeTime(item.published_at ?? item.created_at)}</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <FileText className="w-4 h-4" />
+                      <span>{item.word_count} words</span>
+                    </div>
                   </div>
-                )}
+
+                  {item.published_url && (
+                    <a
+                      href={item.published_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-3 flex items-center space-x-1 text-sm text-blue-600 hover:text-blue-700"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      <span>View published</span>
+                    </a>
+                  )}
+                </div>
               </div>
-            </div>
-          )
-        })}
-      </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Content List */}
+      {!loading && viewMode === 'list' && filteredContent.length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-gray-200 bg-gray-50">
+                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-900">Title</th>
+                <th className="text-center py-3 px-4 text-sm font-semibold text-gray-900">Type</th>
+                <th className="text-center py-3 px-4 text-sm font-semibold text-gray-900">Status</th>
+                <th className="text-center py-3 px-4 text-sm font-semibold text-gray-900">Keyword</th>
+                <th className="text-center py-3 px-4 text-sm font-semibold text-gray-900">Words</th>
+                <th className="text-center py-3 px-4 text-sm font-semibold text-gray-900">Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredContent.map((item) => {
+                const statusInfo = statusConfig[item.status] ?? statusConfig.draft
+
+                return (
+                  <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                    <td className="py-4 px-4 text-sm font-medium text-gray-900">{item.title}</td>
+                    <td className="py-4 px-4 text-center text-sm text-gray-600 capitalize">
+                      {item.content_type.replace('_', ' ')}
+                    </td>
+                    <td className="py-4 px-4 text-center">
+                      <span className={`inline-flex items-center space-x-1 px-2 py-1 ${statusInfo.bg} rounded-full`}>
+                        <statusInfo.icon className={`w-3 h-3 ${statusInfo.color}`} />
+                        <span className={`text-xs font-semibold ${statusInfo.color}`}>{statusInfo.label}</span>
+                      </span>
+                    </td>
+                    <td className="py-4 px-4 text-center text-sm text-gray-600">
+                      {item.target_keyword ?? '-'}
+                    </td>
+                    <td className="py-4 px-4 text-center text-sm text-gray-600">{item.word_count}</td>
+                    <td className="py-4 px-4 text-center text-sm text-gray-600">
+                      {formatRelativeTime(item.published_at ?? item.created_at)}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Empty State */}
-      {filteredContent.length === 0 && (
+      {!loading && filteredContent.length === 0 && (
         <div className="text-center py-12 bg-white rounded-2xl border border-gray-200">
           <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">No content found</h3>
-          <p className="text-gray-600">Try adjusting your search or filters</p>
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">
+            {items.length === 0 ? 'No content yet' : 'No content found'}
+          </h3>
+          <p className="text-gray-600">
+            {items.length === 0
+              ? 'Content will appear here as Zintas creates it for your practice. Get started!'
+              : 'Try adjusting your search or filters.'}
+          </p>
         </div>
       )}
     </div>
