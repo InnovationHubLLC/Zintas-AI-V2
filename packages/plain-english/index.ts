@@ -1,2 +1,2 @@
-export const PACKAGE_NAME = 'plain-english' as const;
-// TODO: Implement in TASK-35
+export { toPlainEnglishWin } from './translate'
+export type { PlainEnglishWin } from './translate'
